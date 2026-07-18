@@ -48,7 +48,13 @@ prove it actually worked.
 
 ## 🚀 Install
 
-### Option 1 — Userscript (recommended)
+### Option 1 — Bookmarklet (no install)
+
+The lightest option: a bookmark that loads the latest version on the fly, so you never update
+anything. Open [`bookmarklet/index.html`](bookmarklet/index.html), drag the **▶ Sort Playlist**
+button to your bookmarks bar, then click it on any playlist you own.
+
+### Option 2 — Userscript (recommended)
 
 1. Install [Tampermonkey](https://www.tampermonkey.net/) (Chrome/Edge) or
    [Violentmonkey](https://violentmonkey.github.io/) / Greasemonkey (Firefox).
@@ -57,7 +63,7 @@ prove it actually worked.
    <br>_Or_ open [`extension/ytsort2.user.js`](extension/ytsort2.user.js) → **Raw**, and your
    userscript manager will offer to install it.
 
-### Option 2 — Chrome extension (unpacked)
+### Option 3 — Chrome extension (unpacked)
 
 1. [Download this repository](https://github.com/LunarWerxs/YTSort/archive/refs/heads/main.zip) and unzip it.
 2. Go to `chrome://extensions` → turn on **Developer mode**.

@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sort YouTube Playlist by Duration — one-click bookmarklet</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Segoe UI', Roboto, Arial, sans-serif; background: linear-gradient(160deg,#1b2130,#0b0e14); color: #e7ecf4; min-height: 100vh; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 56px 24px 80px; }
+  header { display: flex; align-items: center; gap: 18px; margin-bottom: 8px; }
+  header img { width: 64px; height: 64px; }
+  h1 { font-size: 30px; margin: 0; letter-spacing: -.5px; }
+  .tag { color: #aeb8c8; margin: 6px 0 34px; font-size: 17px; }
+  .card { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.09); border-radius: 16px; padding: 26px; margin: 18px 0; }
+  .bm { display: inline-block; background: #e03a24; color: #fff; text-decoration: none; font-weight: 700; font-size: 17px; padding: 13px 22px; border-radius: 12px; box-shadow: 0 6px 20px rgba(224,58,36,.35); cursor: grab; }
+  .bm:active { cursor: grabbing; }
+  .hint { color: #8fa0b6; font-size: 14px; margin-top: 12px; }
+  ol { line-height: 1.7; padding-left: 20px; } li { margin: 4px 0; }
+  code { background: rgba(255,255,255,.08); padding: 2px 6px; border-radius: 6px; font-size: 13px; }
+  .brand { color: #7aa2ff; font-weight: 700; text-decoration: none; }
+  a { color: #7aa2ff; }
+  .fold summary { cursor: pointer; color: #aeb8c8; }
+  textarea { width: 100%; height: 90px; margin-top: 10px; background: #0d1017; color: #cdd6e4; border: 1px solid rgba(255,255,255,.12); border-radius: 8px; padding: 10px; font: 12px/1.5 ui-monospace, Consolas, monospace; resize: vertical; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <img src="https://raw.githubusercontent.com/LunarWerxs/YTSort/main/extension/icons/icon128.png" alt="">
+    <div>
+      <h1>Sort YouTube Playlist by Duration</h1>
+    </div>
+  </header>
+  <p class="tag">Sort any playlist you own by video length, shortest or longest first, in seconds. No extension to install.</p>
+
+  <div class="card">
+    <p style="margin-top:0"><strong>1. Drag this button to your bookmarks bar:</strong></p>
+    <!-- The href IS the bookmarklet. Dragging it to the bookmarks bar saves it as a bookmark. -->
+    <a class="bm" href="javascript:(function(){var U='https://raw.githubusercontent.com/LunarWerxs/YTSort/main/extension/ytsort2.user.js';fetch(U,{cache:'no-cache'}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.text()}).then(function(c){var run=c;try{if(window.trustedTypes&&trustedTypes.createPolicy){run=trustedTypes.createPolicy('ytsort-loader-'+Date.now(),{createScript:function(s){return s}}).createScript(c)}}catch(e){}(0,eval)(run)}).catch(function(e){alert('YTSort failed to load: '+e.message)})})();">▶ Sort Playlist</a>
+    <p class="hint">Tip: if your bookmarks bar is hidden, press <code>Ctrl</code>+<code>Shift</code>+<code>B</code> (Windows) or <code>⌘</code>+<code>Shift</code>+<code>B</code> (Mac) to show it.</p>
+  </div>
+
+  <div class="card">
+    <p style="margin-top:0"><strong>2. Use it on YouTube:</strong></p>
+    <ol>
+      <li>Open a playlist you own (or your Watch&nbsp;Later).</li>
+      <li>Set the playlist's <strong>“Sort by” to Manual</strong>. YouTube only allows reordering in Manual mode.</li>
+      <li>Click the <strong>▶ Sort Playlist</strong> bookmark. The sorting panel appears below the playlist header.</li>
+      <li>Pick shortest- or longest-first and hit <strong>Sort</strong>.</li>
+    </ol>
+    <p class="hint">It always loads the latest version straight from GitHub, so you never have to update anything.</p>
+  </div>
+
+  <details class="fold card">
+    <summary>Prefer to add it manually? Copy the bookmarklet code</summary>
+    <textarea readonly onclick="this.select()">javascript:(function(){var U='https://raw.githubusercontent.com/LunarWerxs/YTSort/main/extension/ytsort2.user.js';fetch(U,{cache:'no-cache'}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.text()}).then(function(c){var run=c;try{if(window.trustedTypes&&trustedTypes.createPolicy){run=trustedTypes.createPolicy('ytsort-loader-'+Date.now(),{createScript:function(s){return s}}).createScript(c)}}catch(e){}(0,eval)(run)}).catch(function(e){alert('YTSort failed to load: '+e.message)})})();</textarea>
+    <p class="hint">Create a new bookmark, name it “Sort Playlist”, and paste this as the URL.</p>
+  </details>
+
+  <p class="tag" style="margin-top:34px">Also available as a <a href="https://greasyfork.org/en/scripts/552228">userscript</a> or a Chrome extension.
+    See <a href="https://github.com/LunarWerxs/YTSort">the repo</a>. Made by <a class="brand" href="https://lunarwerx.com">LunarWerx</a>.</p>
+
+</div>
+</body>
+</html>

@@ -234,6 +234,16 @@
 
   const currentListId = () => (location.pathname === '/playlist' ? new URLSearchParams(location.search).get('list') : null);
 
+  // Is this playlist reorderable by the current user? Owned/editable playlists expose a "Sort by"
+  // menu that offers a "Manual" option (and render drag handles in Manual mode). Playlists you don't
+  // own have neither, so we say so clearly instead of failing with a confusing error.
+  const playlistIsEditable = () => {
+    const menu = document.querySelector('yt-sort-filter-sub-menu-renderer, ytd-sort-filter-sub-menu-renderer');
+    if (menu && /manual/i.test(menu.textContent || '')) return true;
+    if (document.querySelector('ytd-playlist-video-renderer yt-icon#reorder')) return true;
+    return false;
+  };
+
   const PolymerAdapter = {
     name: 'polymer',
     present: () => !!document.querySelector('ytd-playlist-video-renderer'),
@@ -348,30 +358,39 @@
       const m = html.match(/ytInitialData\s*=\s*(\{.*?\});<\/script>/s) || html.match(/ytInitialData"?\]?\s*=\s*(\{.*?\});/s);
       try { return m ? JSON.parse(m[1]) : (window.ytInitialData || null); } catch { return null; }
     },
-    // Harvest playlistVideoRenderer items AND the next continuation token from any data tree.
+    // token nesting varies (continuationEndpoint.continuationCommand.token OR
+    // ...commandExecutorCommand.commands[N].continuationCommand.token) - deep-search the subtree
+    findToken(x) {
+      if (!x || typeof x !== 'object') return null;
+      if (x.continuationCommand && x.continuationCommand.token) return x.continuationCommand.token;
+      for (const k in x) { const t = this.findToken(x[k]); if (t) return t; }
+      return null;
+    },
+    // Harvest playlistVideoRenderer items AND the video-list continuation token. CRITICAL: a
+    // playlist page can have MULTIPLE continuationItemRenderers (video list + related sections);
+    // the RIGHT token is the one that is a SIBLING of the playlistVideoRenderer items. Grabbing any
+    // continuationItemRenderer (e.g. a related-playlists section) yields a token YouTube answers
+    // with an empty page, so only 100 videos ever load. (Live-confirmed bug, 2026-07-18.)
     harvest(root, items) {
       let token = null;
       const walk = (o) => {
         if (!o || typeof o !== 'object') return;
+        if (Array.isArray(o)) {
+          let hasVideos = false, sibToken = null;
+          for (const el of o) {
+            if (el && el.playlistVideoRenderer) hasVideos = true;
+            if (el && el.continuationItemRenderer) { const t = this.findToken(el.continuationItemRenderer); if (t) sibToken = t; }
+          }
+          if (hasVideos && sibToken) token = sibToken; // only trust a token that sits WITH the videos
+          for (const el of o) walk(el);
+          return;
+        }
         if (o.playlistVideoRenderer && o.playlistVideoRenderer.videoId) {
           const r = o.playlistVideoRenderer;
           const title = (r.title && (r.title.simpleText || (r.title.runs && r.title.runs.map((x) => x.text).join('')))) || '';
           let durSec = r.lengthSeconds ? parseInt(r.lengthSeconds, 10) : null;
           if (!Number.isFinite(durSec)) durSec = null;
           items.push({ id: r.videoId, setVideoId: r.setVideoId || null, title, durSec });
-          return;
-        }
-        if (o.continuationItemRenderer) {
-          // token nesting varies (continuationEndpoint.continuationCommand.token OR
-          // ...commandExecutorCommand.commands[N].continuationCommand.token) - search the subtree
-          const find = (x) => {
-            if (!x || typeof x !== 'object') return null;
-            if (x.continuationCommand && x.continuationCommand.token) return x.continuationCommand.token;
-            for (const k in x) { const t = find(x[k]); if (t) return t; }
-            return null;
-          };
-          const t = find(o.continuationItemRenderer);
-          if (t) token = t;
           return;
         }
         for (const k in o) walk(o[k]);
@@ -499,7 +518,10 @@
     async execute() {
       const { adapter, s } = this;
       const reported = adapter.reportedCount();
-      log(`🚀 YTSort2 v${VERSION} - ${s.sortMode === 'asc' ? 'Shortest First' : 'Longest First'}, scope: ${s.scope === 'all' ? 'whole playlist' : 'loaded only'}`);
+      // Editability precondition (applies to both engines): only playlists you own can be reordered.
+      if (!playlistIsEditable()) {
+        return this.fail('Cannot sort this playlist. You can only reorder a playlist you own (or your Watch Later). Nothing was changed.');
+      }
       if (s.filterEnabled) log(`🎯 Filter: ${Math.floor(s.filterMinSec / 60)}-${Math.floor(s.filterMaxSec / 60)} min (outside range → end of list)`);
 
       // ---- engine selection: API is primary when available (instant, no DOM), drag is fallback ----
@@ -637,7 +659,7 @@
     async executeApi() {
       const { s } = this;
       const context = window.ytcfg.data_.INNERTUBE_CONTEXT;
-      log('⚡ API engine: reading full playlist from server…');
+      log('⚡ Reading playlist…');
       let items;
       try { items = await YtApi.fetchServerItems(this.listId); }
       catch (e) { log('⚠️ API read failed (' + (e && e.message ? e.message : e) + ').'); return null; }
@@ -652,7 +674,7 @@
         const allowed = Math.ceil((s.tolerancePct / 100) * reported);
         if (reported - items.length > allowed) return this.fail(`❌ Sort failed: server returned ${items.length} of ${reported} videos (missing ${reported - items.length}, tolerance ${allowed}). Nothing was changed.`);
       }
-      log(`📊 ${items.length} videos. Sorting via the API…`);
+      log(`📊 ${items.length} videos. Sorting…`);
 
       // Self-healing outer loop: apply the plan, then RE-READ server truth and repeat until the
       // server itself reports fully sorted. This absorbs phantom ACKs and any server-side drift -
@@ -943,12 +965,12 @@
     .sort-playlist-wrapper, .yts2-modal {
       --s-text:#f1f1f1; --s-text2:#aaa; --s-surface:#212121; --s-border:rgba(255,255,255,.15);
       --s-btn:rgba(255,255,255,.1); --s-btn-hover:rgba(255,255,255,.2); --s-link:#3ea6ff;
-      --s-log-bg:#0f0f0f; --s-log-text:#f1f1f1;
+      --s-log-bg:#0f0f0f; --s-log-text:#f1f1f1; --s-scheme:dark;
     }
     .sort-playlist-wrapper.yts2-light, .yts2-modal.yts2-light {
       --s-text:#0f0f0f; --s-text2:#606060; --s-surface:#ffffff; --s-border:rgba(0,0,0,.12);
       --s-btn:rgba(0,0,0,.05); --s-btn-hover:rgba(0,0,0,.1); --s-link:#065fd4;
-      --s-log-bg:#f8f8f8; --s-log-text:#0f0f0f;
+      --s-log-bg:#f8f8f8; --s-log-text:#0f0f0f; --s-scheme:light;
     }
     .sort-playlist-wrapper { margin-top: 12px; font-family: Roboto, Arial, sans-serif; }
     .sort-playlist-details { border: 1px solid var(--s-border); border-radius: 12px; background: var(--s-surface); color: var(--s-text); overflow: hidden; }
@@ -960,10 +982,14 @@
     .yts2-btn { border: 1px solid var(--s-border); border-radius: 16px; padding: 7px 14px; cursor: pointer; font-size: 13px; font-weight: 500; background: var(--s-btn); color: var(--s-text); transition: background .15s ease; }
     .yts2-btn:hover { background: var(--s-btn-hover); }
     .yts2-btn:disabled { cursor: default; opacity: .5; }
+    .yts2-btn.yts2-icon { padding: 7px 11px; font-size: 15px; line-height: 1; }
     .yts2-stop { color: #f33; }
     .yts2-primary { font-weight: 600; }
     .yts2-selects { display: flex; gap: 8px; margin-bottom: 8px; }
-    .yts2-select { border: 1px solid var(--s-border); border-radius: 8px; padding: 6px 8px; font-size: 12.5px; background: var(--s-btn); color: var(--s-text); }
+    /* color-scheme makes the NATIVE dropdown (option list) render in the right theme instead of
+       white-on-white in dark mode; option colors are a belt-and-suspenders fallback. */
+    .yts2-select { border: 1px solid var(--s-border); border-radius: 8px; padding: 6px 8px; font-size: 12.5px; background: var(--s-btn); color: var(--s-text); color-scheme: var(--s-scheme); }
+    .yts2-select option { background: var(--s-surface); color: var(--s-text); }
     .yts2-status { font-size: 12px; color: var(--s-text2); margin: 4px 0 6px; min-height: 15px; }
     .yts2-log { padding: 10px; border-radius: 8px; background: var(--s-log-bg); color: var(--s-log-text); border: 1px solid var(--s-border); font: 11.5px/1.5 ui-monospace, Menlo, Consolas, monospace; max-height: 220px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; }
     .yts2-brand { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--s-border); font-size: 11px; color: var(--s-text2); text-align: center; }
@@ -1086,23 +1112,25 @@
 
     const btnRow = document.createElement('div');
     btnRow.className = 'sort-playlist-button';
-    const mkBtn = (label, cls, fn) => {
+    const mkBtn = (label, cls, fn, title) => {
       const b = document.createElement('button');
       b.className = 'yts2-btn' + (cls ? ' ' + cls : '');
       b.innerText = label;
+      if (title) { b.title = title; b.setAttribute('aria-label', title); }
       b.onclick = () => { Promise.resolve().then(fn).catch((e) => { log('❌ ' + (e && e.message ? e.message : e)); console.error('[YTSort2]', e); }); };
       btnRow.appendChild(b);
       return b;
     };
+    // Primary actions keep their labels; utility actions are icon-only with hover tooltips.
     sortButton = mkBtn('▶ Sort Videos', 'yts2-primary', () => startSort());
-    mkBtn('🛑 Stop Sort', 'yts2-stop', () => { if (stoppableRun) { stoppableRun.stop(); log('⏹ Stopping…'); } else log('Nothing to stop.'); });
-    mkBtn('📊 Stats', '', runStats);
-    mkBtn('📥 Export', '', runExport);
-    mkBtn('⚙️ Settings', '', showSettingsModal);
-    mkBtn('Copy Log', '', async () => {
+    mkBtn('🛑 Stop Sort', 'yts2-stop', () => { if (stoppableRun) { stoppableRun.stop(); log('⏹ Stopping…'); } else log('Nothing to stop.'); }, 'Stop the current sort');
+    mkBtn('📊', 'yts2-icon', runStats, 'Playlist stats (total, average, shortest, longest)');
+    mkBtn('📥', 'yts2-icon', runExport, 'Export playlist as CSV');
+    mkBtn('⚙️', 'yts2-icon', showSettingsModal, 'Settings');
+    mkBtn('📋', 'yts2-icon', async () => {
       await navigator.clipboard.writeText(logEntries.map((e) => e.line).join('\n'));
       log('✅ Log copied to clipboard.');
-    });
+    }, 'Copy log to clipboard');
     content.appendChild(btnRow);
 
     statusEl = document.createElement('div');
@@ -1211,7 +1239,7 @@
         setRunningUi(true);
         setStatus(`Sorting… ${activeRun.moves} moves so far`);
       }
-      log(`YTSort2 v${VERSION} ready (${detectAdapter() ? detectAdapter().name : 'no'} layout detected).`);
+      console.log(`[YTSort2] v${VERSION} ready (${detectAdapter() ? detectAdapter().name : 'no'} layout).`); // console only - not user-facing panel noise
     } catch (e) {
       console.error('[YTSort2] mount failed:', e);
     }
