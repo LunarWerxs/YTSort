@@ -1,19 +1,33 @@
 {
   "manifest_version": 3,
-  "name": "Sort YouTube Playlists by Duration",
-  "description": "Sorts YouTube playlists by duration with settings panel, dry run mode, and improved lazy-load handling.",
-  "version": "4.6.0",
-  "author": "L0garithmic",
+  "name": "Sort YouTube Playlist by Duration",
+  "description": "Sort any playlist you own by video length, shortest or longest first, right on the playlist page.",
+  "version": "5.0.0",
+  "author": "LunarWerx",
+  "homepage_url": "https://lunarwerx.com/",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "Sort YouTube Playlist by Duration",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
   "content_scripts": [
     {
       "matches": [
-        "https://*.youtube.com/*",
-        "http://*.youtube.com/*"
+        "https://www.youtube.com/*"
       ],
       "js": [
-        "yt.js"
+        "ytsort2.user.js"
       ],
-      "run_at": "document_start"
+      "run_at": "document_idle",
+      "world": "MAIN"
     }
   ]
 }
