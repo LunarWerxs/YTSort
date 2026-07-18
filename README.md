@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="extension/icons/icon128.png" width="96" height="96" alt="Sort YouTube Playlist by Duration">
+<img src="https://raw.githubusercontent.com/LunarWerxs/YTSort/main/extension/icons/icon128.png" width="96" height="96" alt="Sort YouTube Playlist by Duration">
 
 # Sort YouTube Playlist by Duration
 
@@ -11,7 +11,7 @@
 [![Userscript](https://img.shields.io/badge/install-Greasy%20Fork-670000)](https://greasyfork.org/en/scripts/552228)
 [![Made by LunarWerx](https://img.shields.io/badge/made%20by-LunarWerx-7aa2ff)](https://lunarwerx.com)
 
-<img src="assets/marquee.jpg" width="820" alt="Sort YouTube Playlist by Duration">
+<img src="https://raw.githubusercontent.com/LunarWerxs/YTSort/main/assets/marquee.jpg" width="820" alt="Sort YouTube Playlist by Duration">
 
 </div>
 
@@ -41,9 +41,9 @@ prove it actually worked.
 ## 📸 Screenshots
 
 <div align="center">
-<img src="assets/panel.jpg" width="420" alt="Sorting panel">
+<img src="https://raw.githubusercontent.com/LunarWerxs/YTSort/main/assets/panel.jpg" width="420" alt="Sorting panel">
 &nbsp;
-<img src="assets/stats.jpg" width="420" alt="Playlist stats">
+<img src="https://raw.githubusercontent.com/LunarWerxs/YTSort/main/assets/stats.jpg" width="420" alt="Playlist stats">
 </div>
 
 ## 🚀 Install
