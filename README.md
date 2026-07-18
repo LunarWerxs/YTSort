@@ -51,7 +51,7 @@ prove it actually worked.
 ### Option 1 — Bookmarklet (no install)
 
 The lightest option: a bookmark that loads the latest version on the fly, so you never update
-anything. Open [`bookmarklet/index.html`](bookmarklet/index.html), drag the **▶ Sort Playlist**
+anything. Go to **[ytsort.github.io](https://ytsort.github.io/)**, drag the **Sort Playlist**
 button to your bookmarks bar, then click it on any playlist you own.
 
 ### Option 2 — Userscript (recommended)
