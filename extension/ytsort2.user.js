@@ -46,6 +46,7 @@
     engine: 'auto',          // 'auto' (API if available, else drag) | 'api' | 'drag'
     apiBatchSize: 40,        // moves per edit_playlist request (batching proven live 2026-07-18)
     apiPacingMs: 250,        // delay between batch requests
+    reloadAfterSort: true,   // refresh the page after a successful sort so the new order is visible
   });
 
   const num = (v, dflt, lo, hi) => {
@@ -70,6 +71,7 @@
       engine: ['auto', 'api', 'drag'].includes(raw.engine) ? raw.engine : 'auto',
       apiBatchSize: num(raw.apiBatchSize, DEFAULTS.apiBatchSize, 1, 100),
       apiPacingMs: num(raw.apiPacingMs, DEFAULTS.apiPacingMs, 0, 10000),
+      reloadAfterSort: bool(raw.reloadAfterSort, DEFAULTS.reloadAfterSort),
     };
     if (out.filterMinSec > out.filterMaxSec) [out.filterMinSec, out.filterMaxSec] = [out.filterMaxSec, out.filterMinSec];
     return out;
@@ -514,6 +516,15 @@
       const end = Date.now() + ms;
       while (Date.now() < end && !this.stopRequested) await wait(Math.min(60, end - Date.now()));
     }
+    // After an API sort the reorder is on YouTube's servers but the on-screen list is still the old
+    // order - refresh so the user sees the result. Guarded to real youtube.com so the test harness
+    // (127.0.0.1) never reloads (which would reset the emulator).
+    maybeReload() {
+      if (this.s.reloadAfterSort && /(^|\.)youtube\.com$/i.test(location.hostname)) {
+        log('🔄 Refreshing the page to show the sorted order…');
+        setTimeout(() => { try { location.reload(); } catch { /* ignore */ } }, 1500);
+      }
+    }
 
     async execute() {
       const { adapter, s } = this;
@@ -648,6 +659,7 @@
         }
         log('⚠️ Keep the playlist sort on "Manual" - switching to an automatic sort discards this order.');
         setStatus(`Done - ${this.moves} moves, verified`);
+        this.maybeReload();
         return { ok: true, moves: this.moves };
       }
       return this.fail(`❌ Sort failed final verification: ${bad} of ${finalEntries.length} videos are out of place. ${this.moves} moves were applied; run Sort again to finish.`);
@@ -695,6 +707,7 @@
         if (!items || !items.length) {
           log(`✅ Sort complete! ${this.moves} API moves applied (could not re-read the server to double-check - reload to confirm).`);
           setStatus(`Done (API) - ${this.moves} moves`);
+          this.maybeReload();
           return { ok: true, moves: this.moves, engine: 'api', unverified: true };
         }
         const prevBad = bad;
@@ -713,6 +726,7 @@
         log(`✅ Sort complete! ${this.moves} API moves applied and re-verified against the server (${items.length} videos).`);
         log('⚠️ Keep the playlist sort on "Manual" to preserve this order.');
         setStatus(`Done (API) - ${this.moves} moves, verified`);
+        this.maybeReload();
         return { ok: true, moves: this.moves, engine: 'api' };
       }
       return this.fail(`❌ Sort failed: ${bad} of ${items.length} videos still out of place after ${MAX_PASSES} passes. ${this.moves} moves applied; run Sort again to finish.`);
@@ -1170,6 +1184,7 @@
     modal.appendChild(row('Only include specific lengths', elt('input', { type: 'checkbox', id: 'yts2-filt', checked: settings.filterEnabled })));
     modal.appendChild(row('Min duration (minutes)', elt('input', { type: 'number', id: 'yts2-fmin', min: 0, step: 1, value: Math.floor(settings.filterMinSec / 60) })));
     modal.appendChild(row('Max duration (minutes)', elt('input', { type: 'number', id: 'yts2-fmax', min: 0, step: 1, value: Math.floor(settings.filterMaxSec / 60) })));
+    modal.appendChild(row('Refresh page after sorting', elt('input', { type: 'checkbox', id: 'yts2-reload', checked: settings.reloadAfterSort })));
     modal.appendChild(row('Show log by default', elt('input', { type: 'checkbox', id: 'yts2-logv', checked: settings.logVisible })));
     modal.appendChild(elt('div', { class: 'yts2-btns' },
       elt('button', { class: 'yts2-btn', 'data-act': 'cancel', text: 'Cancel' }),
@@ -1189,6 +1204,7 @@
           filterEnabled: g('yts2-filt').checked,
           filterMinSec: (parseInt(g('yts2-fmin').value, 10) || 0) * 60,
           filterMaxSec: (parseInt(g('yts2-fmax').value, 10) || 600) * 60,
+          reloadAfterSort: g('yts2-reload').checked,
           logVisible: g('yts2-logv').checked,
         });
         saveSettings(settings);
