@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Sort YouTube Playlist by Duration
 // @namespace         https://github.com/L0garithmic/ytsort/
-// @version           5.0.0
+// @version           5.1.0
 // @description       Sort any playlist you own by video length (shortest or longest first) in seconds, via YouTube's own reorder API with a drag-and-drop fallback.
 // @author            LunarWerx
 // @license           GPL-2.0-only
@@ -23,7 +23,7 @@
  */
 (() => {
   'use strict';
-  const VERSION = '5.0.0';
+  const VERSION = '5.1.0';
   if (window.__ytsort2Loaded) return; // idempotent across double-injection
   window.__ytsort2Loaded = true;
 
@@ -1017,10 +1017,18 @@
     .yts2-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-height: 46vh; overflow-y: auto; border: 1px solid var(--s-border); border-radius: 8px; padding: 8px; }
     .yts2-row { padding: 3px 4px; border-bottom: 1px solid var(--s-border); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .yts2-row span { color: var(--s-text2); }
-    .yts2-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
-    .yts2-settings-row { display: flex; justify-content: space-between; align-items: center; margin: 8px 0; gap: 12px; }
-    .yts2-settings-row label { color: var(--s-text); }
-    .yts2-settings-row input[type=number] { width: 110px; background: var(--s-btn); color: var(--s-text); border: 1px solid var(--s-border); border-radius: 6px; padding: 4px 6px; }
+    .yts2-btns { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 16px; }
+    .yts2-btns-right { display: flex; gap: 8px; }
+    .yts2-modal.yts2-modal-narrow { max-width: 430px; }
+    .yts2-sec { font-size: 11px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--s-text2); margin: 16px 0 6px; padding-top: 12px; border-top: 1px solid var(--s-border); }
+    .yts2-sec.yts2-sec-first { border-top: none; padding-top: 2px; margin-top: 6px; }
+    .yts2-settings-row { display: flex; justify-content: space-between; align-items: center; margin: 7px 0; gap: 16px; }
+    .yts2-settings-row label { color: var(--s-text); flex: 1; min-width: 0; }
+    .yts2-settings-row input[type=number] { width: 92px; flex: none; background: var(--s-btn); color: var(--s-text); border: 1px solid var(--s-border); border-radius: 6px; padding: 4px 6px; }
+    .yts2-settings-row input:disabled { cursor: not-allowed; }
+    .yts2-settings-row.yts2-dependent label { padding-left: 16px; position: relative; }
+    .yts2-settings-row.yts2-dependent label::before { content: '↳'; position: absolute; left: 2px; color: var(--s-text2); }
+    .yts2-settings-row.yts2-off { opacity: .42; }
   `;
 
   const injectCss = () => {
@@ -1174,27 +1182,61 @@
 
   const showSettingsModal = () => {
     const overlay = elt('div', { class: 'yts2-overlay' });
-    const modal = elt('div', { class: 'yts2-modal ' + themeClass() });
-    const row = (label, input) => elt('div', { class: 'yts2-settings-row' }, elt('label', { text: label }), input);
+    const modal = elt('div', { class: 'yts2-modal yts2-modal-narrow ' + themeClass() });
+    const row = (label, input, cls) => elt('div', { class: 'yts2-settings-row' + (cls ? ' ' + cls : '') }, elt('label', { text: label }), input);
+    const sec = (title, first) => elt('div', { class: 'yts2-sec' + (first ? ' yts2-sec-first' : ''), text: title });
+    const g = (id) => modal.querySelector('#' + id);
     modal.appendChild(elt('h3', { text: '⚙️ Settings' }));
+
+    // --- Sorting: what to sort and what happens when it finishes ---
+    modal.appendChild(sec('Sorting', true));
+    modal.appendChild(row('Dry run (preview before sorting)', elt('input', { type: 'checkbox', id: 'yts2-dry', checked: settings.dryRun })));
+    modal.appendChild(row('Refresh page after sorting', elt('input', { type: 'checkbox', id: 'yts2-reload', checked: settings.reloadAfterSort })));
+    modal.appendChild(row('Only sort videos within a length range', elt('input', { type: 'checkbox', id: 'yts2-filt', checked: settings.filterEnabled })));
+    modal.appendChild(row('Min length (minutes)', elt('input', { type: 'number', id: 'yts2-fmin', min: 0, step: 1, value: Math.floor(settings.filterMinSec / 60) }), 'yts2-dependent'));
+    modal.appendChild(row('Max length (minutes)', elt('input', { type: 'number', id: 'yts2-fmax', min: 0, step: 1, value: Math.floor(settings.filterMaxSec / 60) }), 'yts2-dependent'));
+
+    // --- Advanced: performance + technical knobs most people never touch ---
+    modal.appendChild(sec('Advanced'));
     modal.appendChild(row('Pacing (ms, lower = faster)', elt('input', { type: 'number', id: 'yts2-pacing', min: 100, max: 5000, step: 50, value: settings.pacing })));
     modal.appendChild(row('API batch size (moves per request)', elt('input', { type: 'number', id: 'yts2-batch', min: 1, max: 100, step: 1, value: settings.apiBatchSize })));
     modal.appendChild(row('Missing-video tolerance (%)', elt('input', { type: 'number', id: 'yts2-tol', min: 0, max: 100, step: 1, value: settings.tolerancePct })));
-    modal.appendChild(row('Dry Run (preview before sorting)', elt('input', { type: 'checkbox', id: 'yts2-dry', checked: settings.dryRun })));
-    modal.appendChild(row('Only include specific lengths', elt('input', { type: 'checkbox', id: 'yts2-filt', checked: settings.filterEnabled })));
-    modal.appendChild(row('Min duration (minutes)', elt('input', { type: 'number', id: 'yts2-fmin', min: 0, step: 1, value: Math.floor(settings.filterMinSec / 60) })));
-    modal.appendChild(row('Max duration (minutes)', elt('input', { type: 'number', id: 'yts2-fmax', min: 0, step: 1, value: Math.floor(settings.filterMaxSec / 60) })));
-    modal.appendChild(row('Refresh page after sorting', elt('input', { type: 'checkbox', id: 'yts2-reload', checked: settings.reloadAfterSort })));
     modal.appendChild(row('Show log by default', elt('input', { type: 'checkbox', id: 'yts2-logv', checked: settings.logVisible })));
+
     modal.appendChild(elt('div', { class: 'yts2-btns' },
-      elt('button', { class: 'yts2-btn', 'data-act': 'cancel', text: 'Cancel' }),
-      elt('button', { class: 'yts2-btn yts2-primary', 'data-act': 'save', text: 'Save Settings' })));
+      elt('button', { class: 'yts2-btn', 'data-act': 'reset', text: '↺ Reset to defaults' }),
+      elt('div', { class: 'yts2-btns-right' },
+        elt('button', { class: 'yts2-btn', 'data-act': 'cancel', text: 'Cancel' }),
+        elt('button', { class: 'yts2-btn yts2-primary', 'data-act': 'save', text: 'Save Settings' }))));
+
+    // length inputs only matter when the range filter is on - dim + disable them otherwise
+    const syncDependents = () => {
+      const on = !!g('yts2-filt').checked;
+      ['yts2-fmin', 'yts2-fmax'].forEach((id) => { const el = g(id); if (el) el.disabled = !on; });
+      modal.querySelectorAll('.yts2-dependent').forEach((r) => r.classList.toggle('yts2-off', !on));
+    };
+    g('yts2-filt').addEventListener('change', syncDependents);
+    syncDependents();
+
     const close = () => { overlay.remove(); modal.remove(); };
     modal.addEventListener('click', (ev) => {
       const act = ev.target && ev.target.getAttribute && ev.target.getAttribute('data-act');
       if (act === 'cancel') close();
+      if (act === 'reset') {
+        // repopulate the form with defaults; not persisted until Save (so Cancel still backs out)
+        const set = (id, v) => { const el = g(id); if (!el) return; if (el.type === 'checkbox') el.checked = v; else el.value = v; };
+        set('yts2-dry', DEFAULTS.dryRun);
+        set('yts2-reload', DEFAULTS.reloadAfterSort);
+        set('yts2-filt', DEFAULTS.filterEnabled);
+        set('yts2-fmin', Math.floor(DEFAULTS.filterMinSec / 60));
+        set('yts2-fmax', Math.floor(DEFAULTS.filterMaxSec / 60));
+        set('yts2-pacing', DEFAULTS.pacing);
+        set('yts2-batch', DEFAULTS.apiBatchSize);
+        set('yts2-tol', DEFAULTS.tolerancePct);
+        set('yts2-logv', DEFAULTS.logVisible);
+        syncDependents();
+      }
       if (act === 'save') {
-        const g = (id) => modal.querySelector('#' + id);
         settings = validateSettings({
           ...settings,
           pacing: g('yts2-pacing').value,
