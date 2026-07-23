@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Sort YouTube Playlist by Duration
 // @namespace         https://github.com/L0garithmic/ytsort/
-// @version           5.1.0
+// @version           5.2.0
 // @description       Sort any playlist you own by video length (shortest or longest first) in seconds, via YouTube's own reorder API with a drag-and-drop fallback.
 // @author            LunarWerx
 // @license           GPL-2.0-only
@@ -23,7 +23,7 @@
  */
 (() => {
   'use strict';
-  const VERSION = '5.1.0';
+  const VERSION = '5.2.0';
   if (window.__ytsort2Loaded) return; // idempotent across double-injection
   window.__ytsort2Loaded = true;
 
@@ -1265,6 +1265,41 @@
 
   const isPlaylistPage = () => location.pathname === '/playlist' && new URLSearchParams(location.search).has('list');
 
+  // ?ytsort=1 on a playlist URL → auto-run the sort ONCE, headless (no button click), after an
+  // auth check. The landing site (site/index.html) turns a ?url=<playlist> into exactly this URL,
+  // so a shared/bookmarked link sorts on load — but ONLY from a browser signed in to YouTube:
+  // without a SAPISID session the InnerTube writes can't be authorized, so we say so plainly
+  // instead of failing silently ("check auth first; if no, error"). The trigger is stripped from
+  // the URL the instant it fires, so a reload or an in-app re-mount never re-sorts.
+  const AUTOSORT_PARAM = 'ytsort';
+  let autoSortPending = false;
+  const maybeAutoSort = () => {
+    const params = new URLSearchParams(location.search);
+    if (!params.get(AUTOSORT_PARAM) || autoSortPending) return;
+    autoSortPending = true;
+    params.delete(AUTOSORT_PARAM);
+    const qs = params.toString();
+    history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
+    (async () => {
+      try {
+        const authed = YtApi.available() && !!(await YtApi.sapisidHash());
+        if (!authed) {
+          showLog();
+          log('❌ Auto-sort needs you signed in to YouTube — no account session was found on this page. Sign in, then open the link again.');
+          setStatus('Not signed in');
+          return;
+        }
+        log('▶ Auto-sort requested by the link — sorting this playlist now…');
+        // Let the playlist finish its first paint so the adapter/engine act on a live page, then
+        // sort FOR REAL (skip the dry-run preview: a URL trigger means "do it", not "preview it").
+        await new Promise((r) => setTimeout(r, 700));
+        await startSort({ skipDryRun: true });
+      } finally {
+        autoSortPending = false;
+      }
+    })();
+  };
+
   const mountIfPlaylist = () => {
     try {
       if (!isPlaylistPage()) return;
@@ -1298,6 +1333,7 @@
         setStatus(`Sorting… ${activeRun.moves} moves so far`);
       }
       console.log(`[YTSort2] v${VERSION} ready (${detectAdapter() ? detectAdapter().name : 'no'} layout).`); // console only - not user-facing panel noise
+      maybeAutoSort(); // fire the URL-triggered auto-sort now that the panel + playlist are live
     } catch (e) {
       console.error('[YTSort2] mount failed:', e);
     }
