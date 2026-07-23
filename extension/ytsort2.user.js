@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Sort YouTube Playlist by Duration
 // @namespace         https://github.com/L0garithmic/ytsort/
-// @version           5.2.0
+// @version           5.2.1
 // @description       Sort any playlist you own by video length (shortest or longest first) in seconds, via YouTube's own reorder API with a drag-and-drop fallback.
 // @author            LunarWerx
 // @license           GPL-2.0-only
@@ -23,9 +23,21 @@
  */
 (() => {
   'use strict';
-  const VERSION = '5.2.0';
-  if (window.__ytsort2Loaded) return; // idempotent across double-injection
-  window.__ytsort2Loaded = true;
+  const VERSION = '5.2.1';
+
+  // Page-context handle. The InnerTube engine needs YouTube's OWN globals (ytcfg / ytInitialData),
+  // which exist only on the real page window. The bookmarklet evals straight into the page, and
+  // `@grant none` normally does the same for the userscript — but some managers (and Tampermonkey's
+  // inject-mode fallback on a CSP-heavy site like YouTube) land the script in a sandbox where
+  // `window` is a wrapper and ytcfg is invisible. That silently demoted the fast API engine to the
+  // unreliable drag fallback, which then failed much later with a misleading "YouTube isn't
+  // accepting reorders / may be throttling" error. Prefer unsafeWindow wherever a manager exposes
+  // it; with @grant none it's undefined and `window` is already the page.
+  const pageWin = (typeof unsafeWindow !== 'undefined' && unsafeWindow) || window;
+
+  // Guard on the PAGE window so an installed userscript and the bookmarklet can't both mount.
+  if (pageWin.__ytsort2Loaded) return; // idempotent across double-injection
+  pageWin.__ytsort2Loaded = true;
 
   // ======================================================================== settings
   const SETTINGS_KEY = 'ytsort2.settings';
@@ -343,7 +355,7 @@
   // page-context SAPISIDHASH auth. Verification reads server truth from a fresh page fetch.
   const YtApi = {
     available() {
-      const d = window.ytcfg && window.ytcfg.data_;
+      const d = pageWin.ytcfg && pageWin.ytcfg.data_;
       return !!(d && d.INNERTUBE_CONTEXT);
     },
     async sapisidHash() {
@@ -358,7 +370,7 @@
     },
     extractInitialData(html) {
       const m = html.match(/ytInitialData\s*=\s*(\{.*?\});<\/script>/s) || html.match(/ytInitialData"?\]?\s*=\s*(\{.*?\});/s);
-      try { return m ? JSON.parse(m[1]) : (window.ytInitialData || null); } catch { return null; }
+      try { return m ? JSON.parse(m[1]) : (pageWin.ytInitialData || null); } catch { return null; }
     },
     // token nesting varies (continuationEndpoint.continuationCommand.token OR
     // ...commandExecutorCommand.commands[N].continuationCommand.token) - deep-search the subtree
@@ -408,8 +420,8 @@
       if (!data) return null;
       const items = [];
       let token = this.harvest(data, items);
-      const context = window.ytcfg.data_.INNERTUBE_CONTEXT;
-      const key = window.ytcfg.data_.INNERTUBE_API_KEY;
+      const context = pageWin.ytcfg.data_.INNERTUBE_CONTEXT;
+      const key = pageWin.ytcfg.data_.INNERTUBE_API_KEY;
       let guard = 0, truncated = false;
       while (token && guard < 80) {
         guard++;
@@ -538,9 +550,16 @@
       // ---- engine selection: API is primary when available (instant, no DOM), drag is fallback ----
       // API engine sorts the WHOLE server playlist, so it only applies to scope 'all' (even when
       // explicitly requested). scope 'loaded' always uses the DOM drag engine.
-      const wantApi = s.scope === 'all' && this.listId && (s.engine === 'api' || (s.engine === 'auto' && YtApi.available()));
+      const apiReachable = YtApi.available();
+      const wantApi = s.scope === 'all' && this.listId && (s.engine === 'api' || (s.engine === 'auto' && apiReachable));
+      // Auto-mode used to demote to drag SILENTLY when ytcfg wasn't reachable, so the only symptom
+      // was a much-later "YouTube is not accepting reorders / may be throttling" drag failure. Say
+      // it up front instead - it almost always means the script isn't running in the page itself.
+      if (!apiReachable && s.engine === 'auto' && s.scope === 'all' && this.listId) {
+        log("⚠️ YouTube's API context (ytcfg) isn't reachable from here, so the fast API engine is off and this falls back to drag, which is far less reliable. If you installed this as a userscript, your manager is sandboxing it - reinstall it, or use the bookmarklet/extension, which run in the page.");
+      }
       if (wantApi) {
-        if (!YtApi.available()) return this.fail('❌ Sort failed: API engine requested but INNERTUBE_CONTEXT is unavailable on this page.');
+        if (!apiReachable) return this.fail('❌ Sort failed: API engine requested but INNERTUBE_CONTEXT is unavailable on this page.');
         const apiResult = await this.executeApi();
         if (apiResult) return apiResult; // null → API not viable (e.g. no setVideoIds); fall through to drag
         log('ℹ️ API engine unavailable for this playlist - falling back to drag engine.');
@@ -670,7 +689,7 @@
     // or null if the API route isn't viable for this playlist (caller falls back to drag).
     async executeApi() {
       const { s } = this;
-      const context = window.ytcfg.data_.INNERTUBE_CONTEXT;
+      const context = pageWin.ytcfg.data_.INNERTUBE_CONTEXT;
       log('⚡ Reading playlist…');
       let items;
       try { items = await YtApi.fetchServerItems(this.listId); }
