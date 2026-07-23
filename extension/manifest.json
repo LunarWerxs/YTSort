@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Sort YouTube Playlist by Duration",
   "description": "Sort any playlist you own by video length, shortest or longest first, right on the playlist page.",
-  "version": "5.2.0",
+  "version": "5.2.1",
   "author": "LunarWerx",
   "homepage_url": "https://lunarwerx.com/",
   "icons": {
