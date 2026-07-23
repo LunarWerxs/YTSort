@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Sort YouTube Playlist by Duration
 // @namespace         https://github.com/L0garithmic/ytsort/
-// @version           5.2.1
+// @version           5.2.2
 // @description       Sort any playlist you own by video length (shortest or longest first) in seconds, via YouTube's own reorder API with a drag-and-drop fallback.
 // @author            LunarWerx
 // @license           GPL-2.0-only
@@ -23,7 +23,7 @@
  */
 (() => {
   'use strict';
-  const VERSION = '5.2.1';
+  const VERSION = '5.2.2';
 
   // Page-context handle. The InnerTube engine needs YouTube's OWN globals (ytcfg / ytInitialData),
   // which exist only on the real page window. The bookmarklet evals straight into the page, and
@@ -196,6 +196,7 @@
       while (logEl.childElementCount > MAX_LOG) logEl.removeChild(logEl.firstChild);
       logEl.scrollTop = logEl.scrollHeight;
     }
+    queueSaveLog();
   };
   const setStatus = (msg) => { if (statusEl) statusEl.textContent = msg; };
   const showLog = () => {
@@ -203,6 +204,31 @@
     const details = document.querySelector('.sort-playlist-details');
     if (details && !details.open) details.open = true;
   };
+
+  // Log persistence. A successful sort auto-refreshes the page, which wiped the log at exactly the
+  // moment you most want it - to see what happened, or to report a failure. Mirror the lines into
+  // sessionStorage (per-tab, survives a reload, gone when the tab closes) and restore them on the
+  // next mount behind a divider, so a run's log outlives the refresh that run triggered.
+  const LOG_KEY = 'ytsort2:log';
+  const saveLog = () => {
+    try { sessionStorage.setItem(LOG_KEY, JSON.stringify(logEntries.slice(-MAX_LOG).map((e) => e.line))); }
+    catch { /* quota / private mode - logging must never break a sort */ }
+  };
+  let logSaveTimer = null;
+  const queueSaveLog = () => { // coalesce bursts: a 300-move sort logs hundreds of lines
+    if (logSaveTimer) return;
+    logSaveTimer = setTimeout(() => { logSaveTimer = null; saveLog(); }, 300);
+  };
+  const restoreLog = () => {
+    try {
+      const lines = JSON.parse(sessionStorage.getItem(LOG_KEY) || '[]');
+      if (!Array.isArray(lines) || !lines.length) return;
+      for (const line of lines.slice(-MAX_LOG)) logEntries.push({ line });
+      logEntries.push({ line: '──────── above: earlier in this tab, kept across the page refresh ────────' });
+    } catch { /* ignore a corrupt entry */ }
+  };
+  // Flush synchronously on the way out so an auto-refresh can't beat the debounce.
+  window.addEventListener('pagehide', saveLog);
 
   // ======================================================================== network signal
   // Advisory phantom-move detector: counts the page's own edit_playlist calls. Only consulted
@@ -1358,6 +1384,7 @@
     }
   };
 
+  restoreLog(); // bring back this tab's earlier log (it survives the post-sort auto-refresh)
   hookNetwork();
   mountIfPlaylist();
 
