@@ -6,9 +6,11 @@
 
 **Reorder any playlist you own by video length — shortest or longest first — in seconds.**
 
-[![Version](https://img.shields.io/badge/version-5.0.0-e03a24)](https://github.com/LunarWerxs/YTSort/releases)
+[![Version](https://img.shields.io/badge/version-5.2.2-e03a24)](https://github.com/LunarWerxs/YTSort/releases/latest)
+[![Chrome Web Store](https://img.shields.io/badge/install-Chrome%20Web%20Store-4285F4)](https://chromewebstore.google.com/detail/sort-youtube-playlist-by/aibpphcngilopehffbmfjmiakmhfpgec)
+[![Greasy Fork](https://img.shields.io/badge/install-Greasy%20Fork-670000)](https://greasyfork.org/en/scripts/552228)
+[![Bookmarklet](https://img.shields.io/badge/install-Bookmarklet-f59e0b)](https://ytsort.github.io/)
 [![License](https://img.shields.io/badge/license-GPL--2.0-blue)](LICENSE)
-[![Userscript](https://img.shields.io/badge/install-Greasy%20Fork-670000)](https://greasyfork.org/en/scripts/552228)
 [![Made by LunarWerx](https://img.shields.io/badge/made%20by-LunarWerx-7aa2ff)](https://lunarwerx.com)
 
 <img src="https://raw.githubusercontent.com/LunarWerxs/YTSort/main/assets/marquee.jpg" width="820" alt="Sort YouTube Playlist by Duration">
@@ -63,13 +65,13 @@ button to your bookmarks bar, then click it on any playlist you own.
    <br>_Or_ open [`extension/ytsort2.user.js`](extension/ytsort2.user.js) → **Raw**, and your
    userscript manager will offer to install it.
 
-### Option 3 — Chrome extension (unpacked)
+### Option 3 — Chrome / Edge extension
 
-1. [Download this repository](https://github.com/LunarWerxs/YTSort/archive/refs/heads/main.zip) and unzip it.
-2. Go to `chrome://extensions` → turn on **Developer mode**.
-3. Click **Load unpacked** → select the **`extension`** folder.
+**[Install from the Chrome Web Store »](https://chromewebstore.google.com/detail/sort-youtube-playlist-by/aibpphcngilopehffbmfjmiakmhfpgec)** — one click, auto-updates, and it declares zero permissions.
 
-_(A one-click Chrome Web Store listing is on the way.)_
+Prefer to load it yourself? Download `ytsort2-chrome-extension-v5.2.2.zip` from the
+[latest release](https://github.com/LunarWerxs/YTSort/releases/latest) and unzip it, then go to
+`chrome://extensions` → turn on **Developer mode** → **Load unpacked** → select the unzipped folder.
 
 ## ▶️ How to use
 
