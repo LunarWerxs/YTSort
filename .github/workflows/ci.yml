@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  checks:
+    name: Shipped-artifact checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Trusted Types on YouTube turns any raw-HTML write into a silent dead
+      # button. This is issue #1, and it cost six months of user reports.
+      - name: No Trusted-Types-blocked HTML sinks
+        run: bash scripts/no-html-sinks.sh
+
+      # extension/yt.js is the update path every pre-v5 install still polls.
+      # A stale or missing mirror strands those users all over again.
+      - name: Legacy update path is in sync
+        run: bash scripts/legacy-mirror.sh
+
+      - name: Install channels agree on the version
+        run: bash scripts/versions-match.sh

@@ -1,0 +1,11 @@
+# Shell scripts and workflows MUST be LF. A CRLF .sh dies on a Linux runner with
+# `$'\r': command not found`, and Git for Windows' bash tolerates it, so the
+# breakage is invisible locally and only ever shows up in CI.
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# The userscript and its legacy mirror are compared byte-for-byte by
+# scripts/legacy-mirror.sh. Pin both to LF so a Windows checkout cannot leave
+# one CRLF and the other LF and fail the check for no real reason.
+extension/*.js text eol=lf
