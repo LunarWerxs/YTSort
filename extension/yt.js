@@ -413,24 +413,33 @@
     // with an empty page, so only 100 videos ever load. (Live-confirmed bug, 2026-07-18.)
     harvest(root, items) {
       let token = null;
+      // Scan a sibling array for the continuation token that sits WITH the video items
+      // (see the CRITICAL note above harvest()). Returns the token, or null if this
+      // array isn't the right one.
+      const findSiblingToken = (arr) => {
+        let hasVideos = false, sibToken = null;
+        for (const el of arr) {
+          if (el && el.playlistVideoRenderer) hasVideos = true;
+          if (el && el.continuationItemRenderer) { const t = this.findToken(el.continuationItemRenderer); if (t) sibToken = t; }
+        }
+        return hasVideos && sibToken ? sibToken : null;
+      };
+      const pushVideoItem = (r) => {
+        const title = (r.title && (r.title.simpleText || (r.title.runs && r.title.runs.map((x) => x.text).join('')))) || '';
+        let durSec = r.lengthSeconds ? parseInt(r.lengthSeconds, 10) : null;
+        if (!Number.isFinite(durSec)) durSec = null;
+        items.push({ id: r.videoId, setVideoId: r.setVideoId || null, title, durSec });
+      };
       const walk = (o) => {
         if (!o || typeof o !== 'object') return;
         if (Array.isArray(o)) {
-          let hasVideos = false, sibToken = null;
-          for (const el of o) {
-            if (el && el.playlistVideoRenderer) hasVideos = true;
-            if (el && el.continuationItemRenderer) { const t = this.findToken(el.continuationItemRenderer); if (t) sibToken = t; }
-          }
-          if (hasVideos && sibToken) token = sibToken; // only trust a token that sits WITH the videos
+          const sibToken = findSiblingToken(o);
+          if (sibToken) token = sibToken; // only trust a token that sits WITH the videos
           for (const el of o) walk(el);
           return;
         }
         if (o.playlistVideoRenderer && o.playlistVideoRenderer.videoId) {
-          const r = o.playlistVideoRenderer;
-          const title = (r.title && (r.title.simpleText || (r.title.runs && r.title.runs.map((x) => x.text).join('')))) || '';
-          let durSec = r.lengthSeconds ? parseInt(r.lengthSeconds, 10) : null;
-          if (!Number.isFinite(durSec)) durSec = null;
-          items.push({ id: r.videoId, setVideoId: r.setVideoId || null, title, durSec });
+          pushVideoItem(o.playlistVideoRenderer);
           return;
         }
         for (const k in o) walk(o[k]);
@@ -564,18 +573,13 @@
       }
     }
 
-    async execute() {
-      const { adapter, s } = this;
-      const reported = adapter.reportedCount();
-      // Editability precondition (applies to both engines): only playlists you own can be reordered.
-      if (!playlistIsEditable()) {
-        return this.fail('Cannot sort this playlist. You can only reorder a playlist you own (or your Watch Later). Nothing was changed.');
-      }
-      if (s.filterEnabled) log(`🎯 Filter: ${Math.floor(s.filterMinSec / 60)}-${Math.floor(s.filterMaxSec / 60)} min (outside range → end of list)`);
-
-      // ---- engine selection: API is primary when available (instant, no DOM), drag is fallback ----
-      // API engine sorts the WHOLE server playlist, so it only applies to scope 'all' (even when
-      // explicitly requested). scope 'loaded' always uses the DOM drag engine.
+    // ---- engine selection: API is primary when available (instant, no DOM), drag is fallback ----
+    // API engine sorts the WHOLE server playlist, so it only applies to scope 'all' (even when
+    // explicitly requested). scope 'loaded' always uses the DOM drag engine.
+    // Returns a terminal result if the API engine ran (success or failure); null to fall through
+    // to the drag engine (never attempted, or attempted and not viable for this playlist).
+    async tryApiEngine() {
+      const { s } = this;
       const apiReachable = YtApi.available();
       const wantApi = s.scope === 'all' && this.listId && (s.engine === 'api' || (s.engine === 'auto' && apiReachable));
       // Auto-mode used to demote to drag SILENTLY when ytcfg wasn't reachable, so the only symptom
@@ -584,31 +588,37 @@
       if (!apiReachable && s.engine === 'auto' && s.scope === 'all' && this.listId) {
         log("⚠️ YouTube's API context (ytcfg) isn't reachable from here, so the fast API engine is off and this falls back to drag, which is far less reliable. If you installed this as a userscript, your manager is sandboxing it - reinstall it, or use the bookmarklet/extension, which run in the page.");
       }
-      if (wantApi) {
-        if (!apiReachable) return this.fail('❌ Sort failed: API engine requested but INNERTUBE_CONTEXT is unavailable on this page.');
-        const apiResult = await this.executeApi();
-        if (apiResult) return apiResult; // null → API not viable (e.g. no setVideoIds); fall through to drag
-        log('ℹ️ API engine unavailable for this playlist - falling back to drag engine.');
+      if (!wantApi) return null;
+      if (!apiReachable) return this.fail('❌ Sort failed: API engine requested but INNERTUBE_CONTEXT is unavailable on this page.');
+      const apiResult = await this.executeApi();
+      if (apiResult) return apiResult; // null → API not viable (e.g. no setVideoIds); fall through to drag
+      log('ℹ️ API engine unavailable for this playlist - falling back to drag engine.');
+      return null;
+    }
+
+    // ---- load phase + preconditions ----
+    // Returns { result } when the run is already terminal (fail/cancelled/already-sorted), or
+    // { entries, totalPlanned } to continue into the move loop.
+    async loadAndPlan(adapter, reported) {
+      const { s } = this;
+      let entries = s.scope === 'all' ? await loadAll(adapter, this, reported) : adapter.collect();
+      if (this.stopRequested) return { result: this.cancelled() };
+      if (entries.length === 0) {
+        return { result: this.fail(`Cannot sort: found 0 videos on this page (adapter: ${adapter.name}). Nothing was changed.`) };
       }
 
-      // ---- load phase ----
-      let entries = s.scope === 'all' ? await loadAll(adapter, this, reported) : adapter.collect();
-      if (this.stopRequested) return this.cancelled();
-      if (entries.length === 0) return this.fail(`Cannot sort: found 0 videos on this page (adapter: ${adapter.name}). Nothing was changed.`);
-
-      // ---- preconditions ----
       if (!adapter.canSort) {
-        return this.fail(`Cannot sort: this playlist view (${adapter.name} layout) has no reorder handles. Stats, Export and Dry Run still work. Nothing was changed.`);
+        return { result: this.fail(`Cannot sort: this playlist view (${adapter.name} layout) has no reorder handles. Stats, Export and Dry Run still work. Nothing was changed.`) };
       }
       const manual = adapter.manualSortActive();
       if (manual === false) {
-        return this.fail('Cannot sort: drag handles are hidden because the playlist "Sort by" is not set to Manual. Switch it to Manual and try again. Nothing was changed.');
+        return { result: this.fail('Cannot sort: drag handles are hidden because the playlist "Sort by" is not set to Manual. Switch it to Manual and try again. Nothing was changed.') };
       }
       const missing = reported !== null ? Math.max(0, reported - entries.length) : 0;
       if (reported !== null && missing > 0) {
         const allowed = Math.ceil((s.tolerancePct / 100) * reported);
         if (missing > allowed) {
-          return this.fail(`❌ Sort failed: only ${entries.length} of ${reported} reported videos loaded (missing ${missing}, tolerance allows ${allowed}). Increase tolerance in Settings or retry. Nothing was sorted.`);
+          return { result: this.fail(`❌ Sort failed: only ${entries.length} of ${reported} reported videos loaded (missing ${missing}, tolerance allows ${allowed}). Increase tolerance in Settings or retry. Nothing was sorted.`) };
         }
         log(`⚠️ Proceeding with ${entries.length} of ${reported} reported videos (${missing} unavailable/not loaded, within ${s.tolerancePct}% tolerance).`);
       }
@@ -619,55 +629,79 @@
         log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         log('✅ Sort complete! Playlist was already in order (0 moves).');
         setStatus('Done - already sorted');
-        return { ok: true, moves: 0 };
+        return { result: { ok: true, moves: 0 } };
       }
 
-      // ---- move loop: one VERIFIED move per iteration, replanned from fresh DOM ----
+      return { entries, totalPlanned };
+    }
+
+    // Guard checks re-run every loop iteration: identity, sort-mode, and the two move caps.
+    // Returns a terminal result to stop the run; null to continue.
+    loopGuardFailure(adapter, moveCap) {
+      const { s } = this;
+      if (this.stopRequested) return this.cancelled();
+      // identity + precondition re-checks: SPA navigation mid-run must never sort another playlist
+      if (currentListId() !== this.listId) {
+        return this.fail(`❌ Sort failed: the page navigated away from the playlist mid-sort (${this.listId} → ${currentListId() || 'not a playlist'}). ${this.moves} verified moves were applied before stopping. Nothing on the new page was touched.`);
+      }
+      if (adapter.manualSortActive() === false) {
+        return this.fail(`❌ Sort failed: the playlist "Sort by" left Manual mode mid-run - drag handles are hidden. Switch back to Manual and run Sort again. ${this.moves} verified moves were applied.`);
+      }
+      if (s.maxMovesPerRun > 0 && this.moves >= s.maxMovesPerRun) {
+        log(`Sort stopped: move cap ${s.maxMovesPerRun} reached (test mode). ${this.moves} verified moves applied.`);
+        setStatus('Stopped at move cap');
+        return { ok: false, capped: true, moves: this.moves };
+      }
+      if (this.moves >= moveCap) {
+        return this.fail(`❌ Sort failed: exceeded the safety bound of ${moveCap} moves without converging - aborting to avoid a livelock. ${this.moves} moves were applied; verify the playlist manually.`);
+      }
+      return null;
+    }
+
+    // Re-collects the DOM each iteration and recovers from a mid-sort collapse (lazy unload).
+    // Returns { result } to stop the run; { entries } to continue with the fresh list.
+    async refreshEntriesForLoop(adapter, maxSeen, reported) {
+      const { s } = this;
+      let entries = adapter.collect();
+      // list collapsed mid-sort (lazy unload)? confirm it is not a transient render dip first
+      if (s.scope === 'all' && entries.length < maxSeen.n) {
+        await this.waitAbortable(Math.max(200, this.pacing / 2));
+        entries = adapter.collect();
+      }
+      if (s.scope === 'all' && entries.length < maxSeen.n) {
+        log(`⚠️ List collapsed to ${entries.length}/${maxSeen.n} - re-loading…`);
+        entries = await loadAll(adapter, this, reported);
+        if (this.stopRequested) return { result: this.cancelled() };
+        if (entries.length < maxSeen.n) {
+          const allowed = Math.ceil((s.tolerancePct / 100) * maxSeen.n);
+          if (maxSeen.n - entries.length > allowed) {
+            return { result: this.fail(`❌ Sort failed: playlist collapsed to ${entries.length} of ${maxSeen.n} loaded videos and would not re-load (tolerance ${allowed}). ${this.moves} moves were applied before the failure.`) };
+          }
+          log(`⚠️ Continuing with ${entries.length} of ${maxSeen.n} (within tolerance).`);
+          maxSeen.n = entries.length;
+        }
+      }
+      if (entries.length > maxSeen.n) {
+        maxSeen.n = entries.length;
+      }
+      return { entries };
+    }
+
+    // ---- move loop: one VERIFIED move per iteration, replanned from fresh DOM ----
+    // Returns a terminal result on fail/cancel/cap; null once the list is fully ordered.
+    async runMoveLoop(adapter, entries, reported, totalPlanned) {
+      const { s } = this;
       const maxSeen = { n: entries.length };
       let moveCap = entries.length * 3 + 20; // grows with maxSeen (late-loading playlists)
-      const startNetCalls = netSignal.calls;
 
       for (;;) {
-        if (this.stopRequested) return this.cancelled();
-        // identity + precondition re-checks: SPA navigation mid-run must never sort another playlist
-        if (currentListId() !== this.listId) {
-          return this.fail(`❌ Sort failed: the page navigated away from the playlist mid-sort (${this.listId} → ${currentListId() || 'not a playlist'}). ${this.moves} verified moves were applied before stopping. Nothing on the new page was touched.`);
-        }
-        if (adapter.manualSortActive() === false) {
-          return this.fail(`❌ Sort failed: the playlist "Sort by" left Manual mode mid-run - drag handles are hidden. Switch back to Manual and run Sort again. ${this.moves} verified moves were applied.`);
-        }
-        if (s.maxMovesPerRun > 0 && this.moves >= s.maxMovesPerRun) {
-          log(`Sort stopped: move cap ${s.maxMovesPerRun} reached (test mode). ${this.moves} verified moves applied.`);
-          setStatus('Stopped at move cap');
-          return { ok: false, capped: true, moves: this.moves };
-        }
-        if (this.moves >= moveCap) {
-          return this.fail(`❌ Sort failed: exceeded the safety bound of ${moveCap} moves without converging - aborting to avoid a livelock. ${this.moves} moves were applied; verify the playlist manually.`);
-        }
+        const guardFail = this.loopGuardFailure(adapter, moveCap);
+        if (guardFail) return guardFail;
 
-        entries = adapter.collect();
-        // list collapsed mid-sort (lazy unload)? confirm it is not a transient render dip first
-        if (s.scope === 'all' && entries.length < maxSeen.n) {
-          await this.waitAbortable(Math.max(200, this.pacing / 2));
-          entries = adapter.collect();
-        }
-        if (s.scope === 'all' && entries.length < maxSeen.n) {
-          log(`⚠️ List collapsed to ${entries.length}/${maxSeen.n} - re-loading…`);
-          entries = await loadAll(adapter, this, reported);
-          if (this.stopRequested) return this.cancelled();
-          if (entries.length < maxSeen.n) {
-            const allowed = Math.ceil((s.tolerancePct / 100) * maxSeen.n);
-            if (maxSeen.n - entries.length > allowed) {
-              return this.fail(`❌ Sort failed: playlist collapsed to ${entries.length} of ${maxSeen.n} loaded videos and would not re-load (tolerance ${allowed}). ${this.moves} moves were applied before the failure.`);
-            }
-            log(`⚠️ Continuing with ${entries.length} of ${maxSeen.n} (within tolerance).`);
-            maxSeen.n = entries.length;
-          }
-        }
-        if (entries.length > maxSeen.n) {
-          maxSeen.n = entries.length;
-          moveCap = Math.max(moveCap, maxSeen.n * 3 + 20);
-        }
+        const refreshed = await this.refreshEntriesForLoop(adapter, maxSeen, reported);
+        if (refreshed.result) return refreshed.result;
+        entries = refreshed.entries;
+        moveCap = Math.max(moveCap, maxSeen.n * 3 + 20); // no-op unless maxSeen just grew
 
         const target = planOrder(entries, s);
         let j = 0;
@@ -691,9 +725,13 @@
         await this.waitAbortable(Math.max(80, this.pacing / 4)); // brief settle; correctness comes from verification, not waiting
       }
 
-      // ---- final verification pass (truth-only reporting) ----
+      return null;
+    }
+
+    // ---- final verification pass (truth-only reporting) ----
+    finalVerify(adapter, reported, startNetCalls) {
       const finalEntries = adapter.collect();
-      const bad = misplacedCount(finalEntries, planOrder(finalEntries, s));
+      const bad = misplacedCount(finalEntries, planOrder(finalEntries, this.s));
       scrollToTop();
       log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       if (bad === 0) {
@@ -708,6 +746,29 @@
         return { ok: true, moves: this.moves };
       }
       return this.fail(`❌ Sort failed final verification: ${bad} of ${finalEntries.length} videos are out of place. ${this.moves} moves were applied; run Sort again to finish.`);
+    }
+
+    async execute() {
+      const { adapter, s } = this;
+      const reported = adapter.reportedCount();
+      // Editability precondition (applies to both engines): only playlists you own can be reordered.
+      if (!playlistIsEditable()) {
+        return this.fail('Cannot sort this playlist. You can only reorder a playlist you own (or your Watch Later). Nothing was changed.');
+      }
+      if (s.filterEnabled) log(`🎯 Filter: ${Math.floor(s.filterMinSec / 60)}-${Math.floor(s.filterMaxSec / 60)} min (outside range → end of list)`);
+
+      const apiResult = await this.tryApiEngine();
+      if (apiResult) return apiResult;
+
+      const loaded = await this.loadAndPlan(adapter, reported);
+      if (loaded.result) return loaded.result;
+      const { entries, totalPlanned } = loaded;
+
+      const startNetCalls = netSignal.calls;
+      const loopResult = await this.runMoveLoop(adapter, entries, reported, totalPlanned);
+      if (loopResult) return loopResult;
+
+      return this.finalVerify(adapter, reported, startNetCalls);
     }
 
     // API engine: read full item list from server, compute target order, emit one edit_playlist
@@ -777,11 +838,10 @@
       return this.fail(`❌ Sort failed: ${bad} of ${items.length} videos still out of place after ${MAX_PASSES} passes. ${this.moves} moves applied; run Sort again to finish.`);
     }
 
-    // One pass of the plan: compute EVERY needed move up front (simulating sequential apply -
-    // matching the server's proven batch semantics), then send them in batches of apiBatchSize.
-    // Returns a terminal result object to abort the whole sort, or null when the pass finished.
-    async apiPass(items, target, context) {
-      const { s } = this;
+    // Compute EVERY needed move up front, simulating sequential apply against a scratch
+    // copy of `items` (matching the server's proven batch semantics) so each action's
+    // predecessor is honest.
+    computeMoveActions(items, target) {
       const live = [...items];
       const actions = [];
       for (let j = 0; j < target.length; j++) {
@@ -792,6 +852,29 @@
         const from = live.findIndex((it) => it.setVideoId === target[j].setVideoId);
         if (from !== -1) { const [m] = live.splice(from, 1); live.splice(j, 0, m); }
       }
+      return actions;
+    }
+
+    // Send one batch, retrying up to 3 times. Returns { ok: true, res } on success, or a
+    // terminal result object (cancelledApi()/fail()) to bubble straight out of apiPass.
+    async sendBatchWithRetry(context, chunk) {
+      let res, ok = false;
+      for (let attempt = 1; attempt <= 3 && !ok; attempt++) {
+        if (this.stopRequested) return this.cancelledApi();
+        res = await YtApi.sendActions(this.listId, context, chunk);
+        ok = res.ok;
+        if (!ok) { log(`⚠️ API batch attempt ${attempt}/3 failed (${res.error}) - retrying…`); await this.waitAbortable(Math.max(400, this.pacing)); }
+      }
+      if (!ok) return this.fail(`❌ Sort failed: an API batch of ${chunk.length} moves failed after 3 attempts (${res && res.error}). ${this.moves} moves applied; run Sort again to finish.`);
+      return { ok: true, res };
+    }
+
+    // One pass of the plan: compute EVERY needed move up front, then send them in batches
+    // of apiBatchSize. Returns a terminal result object to abort the whole sort, or null
+    // when the pass finished.
+    async apiPass(items, target, context) {
+      const { s } = this;
+      const actions = this.computeMoveActions(items, target);
       if (!actions.length) return null;
 
       let passMoves = 0; // pass-local, so the progress readout denominator is honest
@@ -805,18 +888,12 @@
           if (chunk.length > allowance) chunk = chunk.slice(0, allowance);
         }
 
-        let res, ok = false;
-        for (let attempt = 1; attempt <= 3 && !ok; attempt++) {
-          if (this.stopRequested) return this.cancelledApi();
-          res = await YtApi.sendActions(this.listId, context, chunk);
-          ok = res.ok;
-          if (!ok) { log(`⚠️ API batch attempt ${attempt}/3 failed (${res.error}) - retrying…`); await this.waitAbortable(Math.max(400, this.pacing)); }
-        }
-        if (!ok) return this.fail(`❌ Sort failed: an API batch of ${chunk.length} moves failed after 3 attempts (${res && res.error}). ${this.moves} moves applied; run Sort again to finish.`);
+        const batchResult = await this.sendBatchWithRetry(context, chunk);
+        if (!batchResult.ok) return batchResult;
 
         this.moves += chunk.length;
         passMoves += chunk.length;
-        log(`⚡ ${passMoves}/${actions.length} this pass (${this.moves} total, batch of ${chunk.length} in ${res.ms}ms)`);
+        log(`⚡ ${passMoves}/${actions.length} this pass (${this.moves} total, batch of ${chunk.length} in ${batchResult.res.ms}ms)`);
         setStatus(`Sorting (API)… ${passMoves}/${actions.length}`);
         if (s.maxMovesPerRun > 0 && this.moves >= s.maxMovesPerRun) {
           log(`Sort stopped: move cap ${s.maxMovesPerRun} reached (test mode). ${this.moves} API moves applied.`);
@@ -1345,6 +1422,36 @@
     })();
   };
 
+  // header not rendered yet - one shared observer; instance-local capture so a stale
+  // 60s timeout (or success path) can never disconnect a NEWER observer
+  const waitForMountPoint = () => {
+    if (mountObserver) return;
+    const obs = new MutationObserver(() => {
+      if (!isPlaylistPage()) return;
+      if (findMountPoint()) {
+        obs.disconnect();
+        if (mountObserver === obs) mountObserver = null;
+        mountIfPlaylist();
+      }
+    });
+    mountObserver = obs;
+    obs.observe(document.documentElement, { childList: true, subtree: true });
+    setTimeout(() => { obs.disconnect(); if (mountObserver === obs) mountObserver = null; }, 60000);
+  };
+
+  const mountPanel = (mount) => {
+    injectCss();
+    const panel = buildPanel();
+    if (mount.mode === 'after') mount.el.insertAdjacentElement('afterend', panel);
+    else mount.el.appendChild(panel);
+    if (activeRun) { // a remount mid-run must reflect the run, not reset to idle
+      setRunningUi(true);
+      setStatus(`Sorting… ${activeRun.moves} moves so far`);
+    }
+    console.log(`[YTSort2] v${VERSION} ready (${detectAdapter() ? detectAdapter().name : 'no'} layout).`); // console only - not user-facing panel noise
+    maybeAutoSort(); // fire the URL-triggered auto-sort now that the panel + playlist are live
+  };
+
   const mountIfPlaylist = () => {
     try {
       if (!isPlaylistPage()) return;
@@ -1352,33 +1459,10 @@
       if (existing && existing.isConnected) return; // already mounted
       const mount = findMountPoint();
       if (!mount) {
-        // header not rendered yet - one shared observer; instance-local capture so a stale
-        // 60s timeout (or success path) can never disconnect a NEWER observer
-        if (!mountObserver) {
-          const obs = new MutationObserver(() => {
-            if (!isPlaylistPage()) return;
-            if (findMountPoint()) {
-              obs.disconnect();
-              if (mountObserver === obs) mountObserver = null;
-              mountIfPlaylist();
-            }
-          });
-          mountObserver = obs;
-          obs.observe(document.documentElement, { childList: true, subtree: true });
-          setTimeout(() => { obs.disconnect(); if (mountObserver === obs) mountObserver = null; }, 60000);
-        }
+        waitForMountPoint();
         return;
       }
-      injectCss();
-      const panel = buildPanel();
-      if (mount.mode === 'after') mount.el.insertAdjacentElement('afterend', panel);
-      else mount.el.appendChild(panel);
-      if (activeRun) { // a remount mid-run must reflect the run, not reset to idle
-        setRunningUi(true);
-        setStatus(`Sorting… ${activeRun.moves} moves so far`);
-      }
-      console.log(`[YTSort2] v${VERSION} ready (${detectAdapter() ? detectAdapter().name : 'no'} layout).`); // console only - not user-facing panel noise
-      maybeAutoSort(); // fire the URL-triggered auto-sort now that the panel + playlist are live
+      mountPanel(mount);
     } catch (e) {
       console.error('[YTSort2] mount failed:', e);
     }
