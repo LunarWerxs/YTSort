@@ -413,24 +413,33 @@
     // with an empty page, so only 100 videos ever load. (Live-confirmed bug, 2026-07-18.)
     harvest(root, items) {
       let token = null;
+      // Scan a sibling array for the continuation token that sits WITH the video items
+      // (see the CRITICAL note above harvest()). Returns the token, or null if this
+      // array isn't the right one.
+      const findSiblingToken = (arr) => {
+        let hasVideos = false, sibToken = null;
+        for (const el of arr) {
+          if (el && el.playlistVideoRenderer) hasVideos = true;
+          if (el && el.continuationItemRenderer) { const t = this.findToken(el.continuationItemRenderer); if (t) sibToken = t; }
+        }
+        return hasVideos && sibToken ? sibToken : null;
+      };
+      const pushVideoItem = (r) => {
+        const title = (r.title && (r.title.simpleText || (r.title.runs && r.title.runs.map((x) => x.text).join('')))) || '';
+        let durSec = r.lengthSeconds ? parseInt(r.lengthSeconds, 10) : null;
+        if (!Number.isFinite(durSec)) durSec = null;
+        items.push({ id: r.videoId, setVideoId: r.setVideoId || null, title, durSec });
+      };
       const walk = (o) => {
         if (!o || typeof o !== 'object') return;
         if (Array.isArray(o)) {
-          let hasVideos = false, sibToken = null;
-          for (const el of o) {
-            if (el && el.playlistVideoRenderer) hasVideos = true;
-            if (el && el.continuationItemRenderer) { const t = this.findToken(el.continuationItemRenderer); if (t) sibToken = t; }
-          }
-          if (hasVideos && sibToken) token = sibToken; // only trust a token that sits WITH the videos
+          const sibToken = findSiblingToken(o);
+          if (sibToken) token = sibToken; // only trust a token that sits WITH the videos
           for (const el of o) walk(el);
           return;
         }
         if (o.playlistVideoRenderer && o.playlistVideoRenderer.videoId) {
-          const r = o.playlistVideoRenderer;
-          const title = (r.title && (r.title.simpleText || (r.title.runs && r.title.runs.map((x) => x.text).join('')))) || '';
-          let durSec = r.lengthSeconds ? parseInt(r.lengthSeconds, 10) : null;
-          if (!Number.isFinite(durSec)) durSec = null;
-          items.push({ id: r.videoId, setVideoId: r.setVideoId || null, title, durSec });
+          pushVideoItem(o.playlistVideoRenderer);
           return;
         }
         for (const k in o) walk(o[k]);
@@ -829,11 +838,10 @@
       return this.fail(`❌ Sort failed: ${bad} of ${items.length} videos still out of place after ${MAX_PASSES} passes. ${this.moves} moves applied; run Sort again to finish.`);
     }
 
-    // One pass of the plan: compute EVERY needed move up front (simulating sequential apply -
-    // matching the server's proven batch semantics), then send them in batches of apiBatchSize.
-    // Returns a terminal result object to abort the whole sort, or null when the pass finished.
-    async apiPass(items, target, context) {
-      const { s } = this;
+    // Compute EVERY needed move up front, simulating sequential apply against a scratch
+    // copy of `items` (matching the server's proven batch semantics) so each action's
+    // predecessor is honest.
+    computeMoveActions(items, target) {
       const live = [...items];
       const actions = [];
       for (let j = 0; j < target.length; j++) {
@@ -844,6 +852,29 @@
         const from = live.findIndex((it) => it.setVideoId === target[j].setVideoId);
         if (from !== -1) { const [m] = live.splice(from, 1); live.splice(j, 0, m); }
       }
+      return actions;
+    }
+
+    // Send one batch, retrying up to 3 times. Returns { ok: true, res } on success, or a
+    // terminal result object (cancelledApi()/fail()) to bubble straight out of apiPass.
+    async sendBatchWithRetry(context, chunk) {
+      let res, ok = false;
+      for (let attempt = 1; attempt <= 3 && !ok; attempt++) {
+        if (this.stopRequested) return this.cancelledApi();
+        res = await YtApi.sendActions(this.listId, context, chunk);
+        ok = res.ok;
+        if (!ok) { log(`⚠️ API batch attempt ${attempt}/3 failed (${res.error}) - retrying…`); await this.waitAbortable(Math.max(400, this.pacing)); }
+      }
+      if (!ok) return this.fail(`❌ Sort failed: an API batch of ${chunk.length} moves failed after 3 attempts (${res && res.error}). ${this.moves} moves applied; run Sort again to finish.`);
+      return { ok: true, res };
+    }
+
+    // One pass of the plan: compute EVERY needed move up front, then send them in batches
+    // of apiBatchSize. Returns a terminal result object to abort the whole sort, or null
+    // when the pass finished.
+    async apiPass(items, target, context) {
+      const { s } = this;
+      const actions = this.computeMoveActions(items, target);
       if (!actions.length) return null;
 
       let passMoves = 0; // pass-local, so the progress readout denominator is honest
@@ -857,18 +888,12 @@
           if (chunk.length > allowance) chunk = chunk.slice(0, allowance);
         }
 
-        let res, ok = false;
-        for (let attempt = 1; attempt <= 3 && !ok; attempt++) {
-          if (this.stopRequested) return this.cancelledApi();
-          res = await YtApi.sendActions(this.listId, context, chunk);
-          ok = res.ok;
-          if (!ok) { log(`⚠️ API batch attempt ${attempt}/3 failed (${res.error}) - retrying…`); await this.waitAbortable(Math.max(400, this.pacing)); }
-        }
-        if (!ok) return this.fail(`❌ Sort failed: an API batch of ${chunk.length} moves failed after 3 attempts (${res && res.error}). ${this.moves} moves applied; run Sort again to finish.`);
+        const batchResult = await this.sendBatchWithRetry(context, chunk);
+        if (!batchResult.ok) return batchResult;
 
         this.moves += chunk.length;
         passMoves += chunk.length;
-        log(`⚡ ${passMoves}/${actions.length} this pass (${this.moves} total, batch of ${chunk.length} in ${res.ms}ms)`);
+        log(`⚡ ${passMoves}/${actions.length} this pass (${this.moves} total, batch of ${chunk.length} in ${batchResult.res.ms}ms)`);
         setStatus(`Sorting (API)… ${passMoves}/${actions.length}`);
         if (s.maxMovesPerRun > 0 && this.moves >= s.maxMovesPerRun) {
           log(`Sort stopped: move cap ${s.maxMovesPerRun} reached (test mode). ${this.moves} API moves applied.`);
@@ -1397,6 +1422,36 @@
     })();
   };
 
+  // header not rendered yet - one shared observer; instance-local capture so a stale
+  // 60s timeout (or success path) can never disconnect a NEWER observer
+  const waitForMountPoint = () => {
+    if (mountObserver) return;
+    const obs = new MutationObserver(() => {
+      if (!isPlaylistPage()) return;
+      if (findMountPoint()) {
+        obs.disconnect();
+        if (mountObserver === obs) mountObserver = null;
+        mountIfPlaylist();
+      }
+    });
+    mountObserver = obs;
+    obs.observe(document.documentElement, { childList: true, subtree: true });
+    setTimeout(() => { obs.disconnect(); if (mountObserver === obs) mountObserver = null; }, 60000);
+  };
+
+  const mountPanel = (mount) => {
+    injectCss();
+    const panel = buildPanel();
+    if (mount.mode === 'after') mount.el.insertAdjacentElement('afterend', panel);
+    else mount.el.appendChild(panel);
+    if (activeRun) { // a remount mid-run must reflect the run, not reset to idle
+      setRunningUi(true);
+      setStatus(`Sorting… ${activeRun.moves} moves so far`);
+    }
+    console.log(`[YTSort2] v${VERSION} ready (${detectAdapter() ? detectAdapter().name : 'no'} layout).`); // console only - not user-facing panel noise
+    maybeAutoSort(); // fire the URL-triggered auto-sort now that the panel + playlist are live
+  };
+
   const mountIfPlaylist = () => {
     try {
       if (!isPlaylistPage()) return;
@@ -1404,33 +1459,10 @@
       if (existing && existing.isConnected) return; // already mounted
       const mount = findMountPoint();
       if (!mount) {
-        // header not rendered yet - one shared observer; instance-local capture so a stale
-        // 60s timeout (or success path) can never disconnect a NEWER observer
-        if (!mountObserver) {
-          const obs = new MutationObserver(() => {
-            if (!isPlaylistPage()) return;
-            if (findMountPoint()) {
-              obs.disconnect();
-              if (mountObserver === obs) mountObserver = null;
-              mountIfPlaylist();
-            }
-          });
-          mountObserver = obs;
-          obs.observe(document.documentElement, { childList: true, subtree: true });
-          setTimeout(() => { obs.disconnect(); if (mountObserver === obs) mountObserver = null; }, 60000);
-        }
+        waitForMountPoint();
         return;
       }
-      injectCss();
-      const panel = buildPanel();
-      if (mount.mode === 'after') mount.el.insertAdjacentElement('afterend', panel);
-      else mount.el.appendChild(panel);
-      if (activeRun) { // a remount mid-run must reflect the run, not reset to idle
-        setRunningUi(true);
-        setStatus(`Sorting… ${activeRun.moves} moves so far`);
-      }
-      console.log(`[YTSort2] v${VERSION} ready (${detectAdapter() ? detectAdapter().name : 'no'} layout).`); // console only - not user-facing panel noise
-      maybeAutoSort(); // fire the URL-triggered auto-sort now that the panel + playlist are live
+      mountPanel(mount);
     } catch (e) {
       console.error('[YTSort2] mount failed:', e);
     }
