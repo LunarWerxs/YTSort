@@ -12,6 +12,7 @@
 [![Bookmarklet](https://img.shields.io/badge/install-Bookmarklet-f59e0b)](https://ytsort.github.io/)
 [![License](https://img.shields.io/badge/license-GPL--2.0-blue)](LICENSE)
 [![Made by LunarWerx](https://img.shields.io/badge/made%20by-LunarWerx-7aa2ff)](https://lunarwerx.com)
+[![Discord](https://img.shields.io/badge/Discord-join_the_community-5865F2?logo=discord&logoColor=white)](https://discord.gg/PsWpeNUzhk)
 
 <img src="https://raw.githubusercontent.com/LunarWerxs/YTSort/main/assets/marquee.jpg" width="820" alt="Sort YouTube Playlist by Duration">
 
