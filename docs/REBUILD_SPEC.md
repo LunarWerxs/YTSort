@@ -84,14 +84,14 @@ Verified end to end on WL: `200 STATUS_SUCCEEDED`, move persisted server-side af
 Phase 3 = implement this as the primary engine with the drag route as automatic fallback, behind
 the same harness gate (FakeTube grows an edit_playlist emulation endpoint for it).
 
-### Phase 3 — DONE + FULL-SORT PROVEN LIVE (2026-07-18)
+### Phase 3 - DONE + FULL-SORT PROVEN LIVE (2026-07-18)
 
 Implemented as `YtApi` + `SortRun.executeApi()`; `engine: 'auto'` picks API when INNERTUBE is
 available (scope=all) and falls back to drag transparently. Beyond the probe's single move:
 
 - **Full item read via continuation-walking.** `ytInitialData` holds only the first ~100 items;
   the rest are behind continuation tokens. The reader follows them via `POST youtubei/v1/browse`
-  `{context, continuation: token}`. **Token nesting is not fixed** — for Watch Later it sits at
+  `{context, continuation: token}`. **Token nesting is not fixed** - for Watch Later it sits at
   `continuationItemRenderer…commandExecutorCommand.commands[N].continuationCommand.token`, not the
   flat `continuationEndpoint.continuationCommand.token`. The harvester deep-searches the
   `continuationItemRenderer` subtree for any `continuationCommand.token`.
@@ -99,7 +99,7 @@ available (scope=all) and falls back to drag transparently. Beyond the probe's s
   server itself reports fully sorted (≤5 passes; abort if not converging). Absorbs phantom ACKs
   and server-side drift. Harness `api-phantom-detected` (35% phantom rate) converges 7→4→2→0.
 - **FULL LIVE VALIDATION (the release gate, now passed):** entire real 344-video Watch Later
-  sorted shortest-first via the API — **319 edit_playlist moves, 347s, server re-read confirmed
+  sorted shortest-first via the API - **319 edit_playlist moves, 347s, server re-read confirmed
   fully ascending across all 344** (evidence: `analysis/fixtures/e2e-api-full-*.json`).
   No throttling at ~light pacing; pacing can be tuned faster later.
 
@@ -108,7 +108,7 @@ endpoint, synthesized ytInitialData server read) + chaos (`apiFailProb`, `apiPha
 `serverModel` distinct from the DOM so phantom/verify paths are testable. Full suite 28 SPEC / 4
 bug-repros flipped, `--strict` green.
 
-### Batched moves — 21× faster (2026-07-18)
+### Batched moves - 21× faster (2026-07-18)
 
 Live probe (`harness/live/batch-probe.mjs`) proved `edit_playlist` applies MULTIPLE actions per
 request, SEQUENTIALLY, including dependent chains (move X after Y, then Z after X in one body).
@@ -120,11 +120,11 @@ between requests. **Full WL re-sort (343 moves) went from 347s → 16.1s in 9 re
 move-cap checks all operate at batch granularity. New harness scenario `api-batching` asserts a
 30-item shuffle sorts in ≤4 requests.
 
-### API-engine code review (2026-07-18) — 5 confirmed, all fixed
+### API-engine code review (2026-07-18) - 5 confirmed, all fixed
 
 A 13-agent adversarially-verified review of the API engine (`analysis/api-engine-review-result.json`):
 5 confirmed (all fixed + re-verified live), 5 refuted (the refuters used this repo's own live
-evidence — hundreds of authenticated calls — to prove the scary-sounding ones unreachable).
+evidence - hundreds of authenticated calls - to prove the scary-sounding ones unreachable).
 
 - **[critical] False "Sort complete!" on MAX_PASSES exhaustion.** If misplaced count strictly
   decreased each pass but never reached 0 in 5 passes, the loop fell through to an unconditional
@@ -140,7 +140,7 @@ evidence — hundreds of authenticated calls — to prove the scary-sounding one
   the Stop button cancels for any task.
 - **[medium] `engine:'api'` ignored scope.** Fixed: the API path requires `scope === 'all'`.
 
-### Packaging — both formats verified (2026-07-18)
+### Packaging - both formats verified (2026-07-18)
 
 The single `ytsort2.user.js` ships as-is two ways, both smoke-tested:
 - **Userscript**: standard `==UserScript==` header, no `GM_*` APIs → portable across Tampermonkey,
@@ -155,7 +155,7 @@ The single `ytsort2.user.js` ships as-is two ways, both smoke-tested:
 - Lockup-arch sorting (no reorder affordance exists logged-out; revisit when the owner view migrates).
 - GreasyFork/store release work (owner rule: only after "world's best" bar is met).
 
-## Release gate — PASSED (2026-07-18)
+## Release gate - PASSED (2026-07-18)
 
 The full, uncapped sort ran end to end on the real 344-video Watch Later via the API engine:
 319 moves, 347s, server re-read confirmed fully ascending. The last technical gate before release

@@ -1,4 +1,4 @@
-# Privacy Policy — Sort YouTube Playlist by Duration
+# Privacy Policy - Sort YouTube Playlist by Duration
 
 _Last updated: 2026-07-18_
 
@@ -28,10 +28,10 @@ party.**
 
 ## Network activity
 
-The extension makes network requests only to `www.youtube.com` — the same site you are on — to
+The extension makes network requests only to `www.youtube.com` - the same site you are on - to
 read your playlist and to reorder it on your behalf, authenticated by your existing YouTube login.
 No other servers are ever contacted.
 
 ## Contact
 
-LunarWerx — https://lunarwerx.com · https://github.com/LunarWerxs
+LunarWerx - https://lunarwerx.com · https://github.com/LunarWerxs

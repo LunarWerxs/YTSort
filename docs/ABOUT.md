@@ -6,7 +6,7 @@
 
 ## What it is
 
-A userscript and Chrome extension that reorders YouTube playlists by video duration—shortest or longest first—in seconds using YouTube's InnerTube API. It replaces manual drag-and-drop, supports duration filtering and dry-run preview, and verifies every move server-side before confirming success.
+A userscript and Chrome extension that reorders YouTube playlists by video duration - shortest or longest first - in seconds using YouTube's InnerTube API. It replaces manual drag-and-drop, supports duration filtering and dry-run preview, and verifies every move server-side before confirming success.
 
 ## Things not to forget
 
@@ -40,9 +40,9 @@ edit the dossier, not this block. Everything ABOVE the marker is yours.
 
 ### Architecture
 
-- `extension/ytsort2.user.js` - Main userscript source—~3000 lines, single-file architecture; contains all UI, sorting logic, API handlers, and adapters.
+- `extension/ytsort2.user.js` - Main userscript source - ~3000 lines, single-file architecture; contains all UI, sorting logic, API handlers, and adapters.
 - `extension/yt.js` - Build artifact copy of ytsort2.user.js (identical content).
-- `bookmarklet/` - Bookmarklet loader (30 lines)—fetches and injects the latest userscript from CDN.
+- `bookmarklet/` - Bookmarklet loader (30 lines) - fetches and injects the latest userscript from CDN.
 - `extension/manifest.json` - Chrome MV3 manifest; declares the userscript as MV3 content script with world:MAIN for page context access.
 - `assets/` - Extension icon and marketing images (marquee, panel screenshots, stats).
 - `docs/REBUILD_SPEC.md` - Specification and architecture decisions; full release gate gate documentation and live test fixtures.
