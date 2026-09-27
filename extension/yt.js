@@ -61,7 +61,7 @@
         body: JSON.stringify({
           ingestKey: 'ak_91fd0815afdd631034c16bc803c9491a6cf5', anonymousId: id, sessionId: USAGE_SESSION, url: USAGE_URL,
           tracking: { version: 1, source: 'implied', purposes: { analytics: 'granted' } },
-          events: names.map((n) => ({ type: 'custom', name: n, url: USAGE_URL, props: Object.assign({}, base, props || {}) })),
+          events: names.map((n) => ({ type: 'custom', name: n, url: USAGE_URL, props: { ...base, ...props } })),
         }),
       }).catch(() => {});
     } catch (e) { /* counting never touches the page */ }
