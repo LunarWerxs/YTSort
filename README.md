@@ -102,9 +102,10 @@ falls back to a carefully verified drag-and-drop engine.
 
 ## 🔒 Privacy
 
-**YTSort collects no data.** Your settings live only in your browser, and the only network
-requests it makes are to `youtube.com` - to read and reorder *your own* playlists, using *your*
-login. Nothing is ever sent to us or any third party. Full policy: [PRIVACY.md](PRIVACY.md).
+YTSort collects anonymous usage statistics (such as page views, the version in use and which
+features are used) to see what people use and improve it. Your settings live only in your
+browser, and its playlist requests go to `youtube.com` - to read and reorder *your own*
+playlists, using *your* login. Full policy: [PRIVACY.md](PRIVACY.md).
 
 ## 🧯 Troubleshooting
 
@@ -135,10 +136,10 @@ login. Nothing is ever sent to us or any third party. Full policy: [PRIVACY.md](
   playlist manager whose feature list includes filtering and sorting videos by duration, among
   much else. YTSort's distinct trait is re-reading the finished order from YouTube's servers
   before reporting success.
-- **Is my data sent anywhere?** No. YTSort collects no data and has no backend of its own. The
-  only network requests it makes are to youtube.com, to read and reorder your own playlists using
-  your existing login. Nothing is sent to LunarWerx or any third party; see
-  [PRIVACY.md](PRIVACY.md) for the full policy.
+- **Is my data sent anywhere?** Your playlists and settings stay on YouTube and in your browser:
+  the extension reads and reorders your own playlists on youtube.com with your existing login.
+  It also sends LunarWerx anonymous usage statistics (which features are used, the version in
+  use). See [PRIVACY.md](PRIVACY.md) for the full policy.
 - **Does the Chrome extension need any special permissions?** No. Both the Chrome Web Store
   listing and the extension's manifest declare zero permissions. It runs only as a content script
   on youtube.com pages and talks to YouTube's own API using your already-open browser session, so

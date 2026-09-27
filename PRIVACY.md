@@ -2,8 +2,8 @@
 
 _Last updated: 2026-07-18_
 
-**This extension collects no personal data and transmits no data to the developer or any third
-party.**
+**YTSort collects anonymous usage statistics (such as page views, the version in use and which
+features are used) to see what people use and improve it.**
 
 ## What the extension does with data
 
@@ -17,10 +17,8 @@ party.**
 
 ## What the extension does NOT do
 
-- It does not send any data to the developer (LunarWerx) or to any third party.
-- It does not use analytics, tracking, advertising, or fingerprinting of any kind.
-- It does not collect personally identifiable information, financial information, authentication
-  credentials, health information, personal communications, location, or browsing history.
+- YTSort collects anonymous usage statistics (such as page views, the version in use and which
+  features are used) to see what people use and improve it.
 - It does not sell or transfer user data to anyone.
 - It does not use or transfer user data for creditworthiness or lending purposes.
 - It does not download or execute any remote code; all of its code ships inside the extension
