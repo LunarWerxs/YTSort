@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name              Sort YouTube Playlist by Duration
 // @namespace         https://github.com/L0garithmic/ytsort/
-// @version           5.2.2
+// @version           5.3.0
 // @description       Sort any playlist you own by video length (shortest or longest first) in seconds, via YouTube's own reorder API with a drag-and-drop fallback.
 // @author            LunarWerx
 // @license           GPL-2.0-only
@@ -23,7 +23,7 @@
  */
 (() => {
   'use strict';
-  const VERSION = '5.2.2';
+  const VERSION = '5.3.0';
 
   // Page-context handle. The InnerTube engine needs YouTube's OWN globals (ytcfg / ytInitialData),
   // which exist only on the real page window. The bookmarklet evals straight into the page, and
@@ -38,6 +38,37 @@
   // Guard on the PAGE window so an installed userscript and the bookmarklet can't both mount.
   if (pageWin.__ytsort2Loaded) return; // idempotent across double-injection
   pageWin.__ytsort2Loaded = true;
+
+  // Anonymous usage statistics for LunarWerx (PRIVACY.md): that YTSort was active in this browser
+  // session, and each sort's outcome (moves, videos, engine, or the kind of failure). Never a
+  // title, a playlist id or anything from your account. Sent to Connections analytics under the
+  // YTSort site's public ingest key; a random id in localStorage tells returning browsers apart.
+  // Every failure is swallowed: counting can never touch a sort or the page.
+  const USAGE_URL = 'https://ytsort.lunarwerx.com/app';
+  const USAGE_SESSION = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  const usage = (name, props) => {
+    try {
+      let id = localStorage.getItem('yts2:uid');
+      const names = id ? [name] : ['app_install', name];
+      if (!id) {
+        id = (crypto.randomUUID && crypto.randomUUID()) || USAGE_SESSION;
+        localStorage.setItem('yts2:uid', id);
+      }
+      const base = { v: VERSION, surface: typeof GM_info !== 'undefined' ? 'userscript' : 'page' };
+      fetch('https://analytics.connectionsapi.com/ingest/batch', {
+        method: 'POST', mode: 'cors', credentials: 'omit', keepalive: true,
+        headers: { 'content-type': 'text/plain;charset=UTF-8' },
+        body: JSON.stringify({
+          ingestKey: 'ak_91fd0815afdd631034c16bc803c9491a6cf5', anonymousId: id, sessionId: USAGE_SESSION, url: USAGE_URL,
+          tracking: { version: 1, source: 'implied', purposes: { analytics: 'granted' } },
+          events: names.map((n) => ({ type: 'custom', name: n, url: USAGE_URL, props: Object.assign({}, base, props || {}) })),
+        }),
+      }).catch(() => {});
+    } catch (e) { /* counting never touches the page */ }
+  };
+  try {
+    if (!sessionStorage.getItem('yts2:open')) { sessionStorage.setItem('yts2:open', '1'); usage('app_open'); }
+  } catch (e) { /* storage blocked: nothing counted */ }
 
   // ======================================================================== settings
   const SETTINGS_KEY = 'ytsort2.settings';
@@ -757,6 +788,7 @@
         }
         log('⚠️ Keep the playlist sort on "Manual" - switching to an automatic sort discards this order.');
         setStatus(`Done - ${this.moves} moves, verified`);
+        usage('sort_done', { moves: this.moves, videos: finalEntries.length, engine: 'drag' });
         this.maybeReload();
         return { ok: true, moves: this.moves };
       }
@@ -847,6 +879,7 @@
         log(`✅ Sort complete! ${this.moves} API moves applied and re-verified against the server (${items.length} videos).`);
         log('⚠️ Keep the playlist sort on "Manual" to preserve this order.');
         setStatus(`Done (API) - ${this.moves} moves, verified`);
+        usage('sort_done', { moves: this.moves, videos: items.length, engine: 'api' });
         this.maybeReload();
         return { ok: true, moves: this.moves, engine: 'api' };
       }
@@ -970,12 +1003,16 @@
       log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       log(`⛔ Sort cancelled by user. ${this.moves} verified moves were applied before stopping.`);
       setStatus('Cancelled');
+      usage('sort_failed', { kind: 'cancelled', moves: this.moves });
       return { ok: false, cancelled: true, moves: this.moves };
     }
     fail(msg) {
       log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       log(msg.startsWith('❌') || msg.startsWith('Cannot sort') ? msg : '❌ ' + msg);
       setStatus('Failed - see log');
+      // Only the failure's own words up to the first colon or quote ("Sort failed final
+      // verification", "Cannot sort"): a video title can follow and never leaves the page.
+      usage('sort_failed', { kind: msg.replace(/^❌\s*/, '').split(/[:"(]/)[0].trim().slice(0, 60), moves: this.moves });
       return { ok: false, moves: this.moves };
     }
   }

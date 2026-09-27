@@ -6,7 +6,7 @@
 
 **Reorder any playlist you own by video length - shortest or longest first - in seconds.**
 
-[![Version](https://img.shields.io/badge/version-5.2.2-e03a24)](https://github.com/LunarWerxs/YTSort/releases/latest)
+[![Version](https://img.shields.io/badge/version-5.3.0-e03a24)](https://github.com/LunarWerxs/YTSort/releases/latest)
 [![Chrome Web Store](https://img.shields.io/badge/install-Chrome%20Web%20Store-4285F4)](https://chromewebstore.google.com/detail/sort-youtube-playlist-by/aibpphcngilopehffbmfjmiakmhfpgec)
 [![Greasy Fork](https://img.shields.io/badge/install-Greasy%20Fork-670000)](https://greasyfork.org/en/scripts/552228)
 [![Bookmarklet](https://img.shields.io/badge/install-Bookmarklet-f59e0b)](https://ytsort.github.io/)
@@ -75,7 +75,7 @@ button to your bookmarks bar, then click it on any playlist you own.
 
 **[Install from the Chrome Web Store »](https://chromewebstore.google.com/detail/sort-youtube-playlist-by/aibpphcngilopehffbmfjmiakmhfpgec)** - one click, auto-updates, and it declares zero permissions.
 
-Prefer to load it yourself? Download `ytsort2-chrome-extension-v5.2.2.zip` from the
+Prefer to load it yourself? Download `ytsort2-chrome-extension-v5.3.0.zip` from the
 [latest release](https://github.com/LunarWerxs/YTSort/releases/latest) and unzip it, then go to
 `chrome://extensions` → turn on **Developer mode** → **Load unpacked** → select the unzipped folder.
 
