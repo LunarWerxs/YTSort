@@ -144,6 +144,21 @@
     return h > 0 ? `${h}h ${m}m ${sec}s` : m > 0 ? `${m}m ${sec}s` : `${sec}s`;
   };
 
+  // The ONE CSV exporter. A text cell starting with = + - @ TAB or CR gets a leading ' so a
+  // spreadsheet shows it as text instead of running it as a formula (video titles are
+  // attacker-controlled); a cell holding " , CR or LF is then quoted with its quotes doubled
+  // (RFC 4180). csvBlob adds the optional UTF-8 BOM.
+  const csvCell = (v) => {
+    if (v === null || v === undefined) return '';
+    if (typeof v === 'number') return String(v);
+    let s = String(v);
+    if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const toCsv = (rows) => rows.map((r) => r.map(csvCell).join(',') + '\n').join('');
+  const csvBlob = (rows, { bom = false } = {}) =>
+    new Blob([(bom ? '\uFEFF' : '') + toCsv(rows)], { type: 'text/csv;charset=utf-8;' });
+
   // DOM builder - NEVER use innerHTML: YouTube enforces Trusted Types (TrustedHTML) and any
   // innerHTML assignment throws. Discovered live 2026-07-18; also safer with hostile titles.
   const elt = (tag, attrs = {}, ...children) => {
@@ -1010,16 +1025,15 @@
     log('📤 Exporting playlist…');
     const entries = settings.scope === 'all' ? await loadAll(adapter, run, adapter.reportedCount()) : adapter.collect();
     if (entries.length === 0) { log('❌ Export failed: 0 videos found.'); return; }
-    let csv = 'Position,Title,Duration,URL\n';
+    const rows = [['Position', 'Title', 'Duration', 'URL']];
     entries.forEach((e, i) => {
-      const title = '"' + (e.title || 'Unknown').replace(/"/g, '""') + '"';
       const dur = e.durSec === null ? 'N/A'
         : `${String(Math.floor(e.durSec / 3600)).padStart(2, '0')}:${String(Math.floor((e.durSec % 3600) / 60)).padStart(2, '0')}:${String(e.durSec % 60).padStart(2, '0')}`;
       const idm = (e.url || '').match(/[?&]v=([A-Za-z0-9_-]+)/);
       const url = idm ? `https://www.youtube.com/watch?v=${idm[1]}` : '';
-      csv += `${i + 1},${title},${dur},${url}\n`;
+      rows.push([i + 1, e.title || 'Unknown', dur, url]);
     });
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const blob = csvBlob(rows);
     const a = document.createElement('a');
     const listm = location.search.match(/list=([^&]+)/);
     const d = new Date();
