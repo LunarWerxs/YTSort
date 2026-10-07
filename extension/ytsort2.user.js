@@ -88,6 +88,7 @@
     maxMovesPerRun: 0,        // 0 = unlimited (test hook)
     engine: 'auto',          // 'auto' (API if available, else drag) | 'api' | 'drag'
     apiBatchSize: 40,        // moves per edit_playlist request (batching proven live 2026-07-18)
+    apiPacingMs: 250,        // delay between batch requests
     reloadAfterSort: true,   // refresh the page after a successful sort so the new order is visible
   });
 
@@ -112,6 +113,7 @@
       maxMovesPerRun: num(raw.maxMovesPerRun, 0, 0, 100000),
       engine: ['auto', 'api', 'drag'].includes(raw.engine) ? raw.engine : 'auto',
       apiBatchSize: num(raw.apiBatchSize, DEFAULTS.apiBatchSize, 1, 100),
+      apiPacingMs: num(raw.apiPacingMs, DEFAULTS.apiPacingMs, 0, 10000),
       reloadAfterSort: bool(raw.reloadAfterSort, DEFAULTS.reloadAfterSort),
     };
     if (out.filterMinSec > out.filterMaxSec) [out.filterMinSec, out.filterMaxSec] = [out.filterMaxSec, out.filterMinSec];
@@ -946,7 +948,7 @@
           setStatus('Stopped at move cap');
           return { ok: false, capped: true, moves: this.moves, engine: 'api' };
         }
-        await this.waitAbortable(250);
+        await this.waitAbortable(s.apiPacingMs);
       }
       return null;
     }

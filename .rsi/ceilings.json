@@ -4,11 +4,5 @@
   "commit": "483b9e21ca369c6183f2a8c2bd2bba8b7d636a4e",
   "trial": "20261006-extension-shipped-bytes-940b",
   "value": 92755
- },
- "extension.userscript_bytes": {
-  "at": "2026-10-07T11:42:03+00:00",
-  "commit": "43fe168aae82b32e6d0892397b8067e919d4917c",
-  "trial": "20261007-extension-userscript-bytes-a679",
-  "value": 85027
  }
 }

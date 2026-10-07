@@ -1,0 +1,107 @@
+{
+ "closed": {
+  "a": {
+   "commit": "75b93a1bf819c8e19bf164eb2f9631e52730fe12",
+   "def_hash": "229b23d80d726c63",
+   "dirty": false,
+   "id": "m-20261007T114043-258ae4",
+   "load_after": 0.441,
+   "load_before": 0.623,
+   "machine": "MPC-HELL",
+   "metric": "extension.userscript_bytes",
+   "project": "ytsort2-upstream",
+   "reason": null,
+   "seconds": 1.292,
+   "settings": {
+    "gate": "exact",
+    "kind": "size",
+    "measure_files": {
+     "scripts/rsi/shipped_bytes.py": "b601f6a13e9fe5bf7bf3b2b8507653e55b053dc6"
+    }
+   },
+   "started": "2026-10-07T11:40:43+00:00",
+   "status": "ok",
+   "value": 85171
+  },
+  "applies_if": null,
+  "at": "2026-10-07T11:41:49+00:00",
+  "b": {
+   "commit": "43fe168aae82b32e6d0892397b8067e919d4917c",
+   "def_hash": "229b23d80d726c63",
+   "dirty": false,
+   "id": "m-20261007T114140-de57ce",
+   "load_after": 0.422,
+   "load_before": 0.379,
+   "machine": "MPC-HELL",
+   "metric": "extension.userscript_bytes",
+   "project": "ytsort2-upstream",
+   "reason": null,
+   "seconds": 0.375,
+   "settings": {
+    "gate": "exact",
+    "kind": "size",
+    "measure_files": {
+     "scripts/rsi/shipped_bytes.py": "b601f6a13e9fe5bf7bf3b2b8507653e55b053dc6"
+    }
+   },
+   "started": "2026-10-07T11:41:40+00:00",
+   "status": "ok",
+   "value": 85027
+  },
+  "guards": [
+   {
+    "a": 0,
+    "b": 0,
+    "declared": false,
+    "metric": "arkitect_gating_errors",
+    "state": "ok"
+   },
+   {
+    "a": 94,
+    "b": 94,
+    "declared": false,
+    "metric": "arkitect_warnings",
+    "state": "ok"
+   },
+   {
+    "a": 174,
+    "b": 174,
+    "declared": false,
+    "metric": "arkitect_no_data",
+    "state": "ok"
+   },
+   {
+    "a": 0,
+    "b": 0,
+    "declared": false,
+    "metric": "deps_total",
+    "state": "ok"
+   }
+  ],
+  "method": "keep refused on review 2026-10-07: extension/yt.js is the legacy mirror CI requires to match ytsort2.user.js but for its two URL lines (scripts/legacy-mirror.sh); the change edited only the userscript, so the mirror check fails (reverted) (was: exact: 85171 -> 85027)",
+  "note": "Removed unused apiPacingMs setting from DEFAULTS and validateSettings, hardcoded delay value (144 bytes saved)",
+  "pattern": null,
+  "verdict": "dropped"
+ },
+ "def_hash": "229b23d80d726c63",
+ "id": "20261007-extension-userscript-bytes-a679",
+ "idea": "Remove unused apiPacingMs setting that is never exposed in UI",
+ "lane": "normal",
+ "metric": "extension.userscript_bytes",
+ "opened": {
+  "at": "2026-10-07T11:40:35+00:00",
+  "by": "blogi",
+  "commit": "75b93a1bf819c8e19bf164eb2f9631e52730fe12",
+  "machine": "MPC-HELL"
+ },
+ "pass_line": null,
+ "predict": {
+  "expect": 84900.0,
+  "hi": 86000.0,
+  "lo": 84000.0,
+  "p_keep": 0.75
+ },
+ "probe_minutes": null,
+ "project": "ytsort2-upstream",
+ "schema": "hydra-rsi-trial/1"
+}
