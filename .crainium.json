@@ -1,0 +1,12 @@
+{
+  "docs": {
+    "home": "cloud",
+    "since": "2026-10-31",
+    "repo": "l0garithmic/ytsort",
+    "read": "docs tool: search, get",
+    "write": "docs tool: edit then put",
+    "keep": [
+      "PRIVACY.md"
+    ]
+  }
+}
